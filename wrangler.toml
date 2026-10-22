@@ -1,0 +1,30 @@
+name = "hornandfin-tag-alerts"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# Every 15 minutes: check state pages and send instant alerts to paid subscribers.
+# 14:30 UTC (7:30am Pacific in summer): send the free daily digest.
+[triggers]
+crons = ["*/15 * * * *", "30 14 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hornandfin-tag-alerts"
+database_id = "1407b4b8-62e9-40fb-8910-b386792ccf0c"
+
+[vars]
+SITE_URL = "https://hornandfin.com"
+API_URL = "https://alerts.hornandfin.com"
+FROM_EMAIL = "Horn & Fin Tag Alerts <alerts@hornandfin.com>"
+PAID_PRICE_LABEL = "$4.99/month"
+USER_AGENT = "HornAndFinTagAlerts/0.1 (+https://hornandfin.com/tag-alerts; alerts@hornandfin.com)"
+
+# Secrets (set with `wrangler secret put NAME`, never commit them):
+#   RESEND_API_KEY        email sending (resend.com)
+#   TWILIO_ACCOUNT_SID    text messages
+#   TWILIO_AUTH_TOKEN
+#   TWILIO_FROM_NUMBER    e.g. +15305550123
+#   STRIPE_SECRET_KEY     paid tier
+#   STRIPE_PRICE_ID       the monthly price for instant alerts
+#   STRIPE_WEBHOOK_SECRET
+#   ADMIN_TOKEN           protects /admin endpoints
