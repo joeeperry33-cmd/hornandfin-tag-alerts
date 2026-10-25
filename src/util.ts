@@ -13,6 +13,16 @@ export const STATES: Record<string, string> = {
 
 export const SPECIES = ['elk', 'deer', 'pronghorn', 'moose', 'sheep', 'goat', 'bear', 'turkey', 'other'];
 
+/** Launch period: everyone gets instant alerts free. */
+export function isIntro(env: { INTRO_FREE?: string }): boolean {
+  return env.INTRO_FREE === 'true';
+}
+
+/** Text alerts only once a Twilio number is configured. */
+export function textsEnabled(env: { TWILIO_FROM_NUMBER?: string }): boolean {
+  return !!env.TWILIO_FROM_NUMBER;
+}
+
 export function nowIso(): string {
   return new Date().toISOString();
 }

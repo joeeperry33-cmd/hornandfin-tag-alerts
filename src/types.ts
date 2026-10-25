@@ -9,6 +9,8 @@ export interface Env {
   BUSINESS_NAME: string;
   BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
+  INTRO_FREE?: string;
+  PARTNER_URL?: string;
   USER_AGENT: string;
   RESEND_API_KEY?: string;
   TWILIO_ACCOUNT_SID?: string;

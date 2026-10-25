@@ -32,6 +32,9 @@ CONTACT_EMAIL = "support@leftovertagalerts.com"
 BUSINESS_NAME = "Perry Capital LLC"
 BUSINESS_ADDRESS = "158 Valley View Dr, Auburn, CA 95603"
 PAID_PRICE_LABEL = "$4.99/month"
+# "true" = launch period: every confirmed subscriber gets instant alerts free, no prices or upgrade buttons shown.
+INTRO_FREE = "true"
+PARTNER_URL = "https://hornandfin.com"
 USER_AGENT = "LeftoverTagAlerts/0.2 (+https://leftovertagalerts.com/bot)"
 
 # Secrets (set with `wrangler secret put NAME` or in the dashboard, never commit them):

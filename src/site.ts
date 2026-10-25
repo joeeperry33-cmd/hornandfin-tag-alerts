@@ -1,5 +1,5 @@
 import type { Env } from './types';
-import { escapeHtml, SPECIES, STATES } from './util';
+import { escapeHtml, isIntro, SPECIES, STATES, textsEnabled } from './util';
 
 /*
  * Leftover Tag Alerts site design
@@ -73,10 +73,10 @@ ${opts.noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonica
 <meta name="theme-color" content="#1f3d35"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
 ${FONTS}<style>${BASE_CSS}${opts.css ?? ''}</style></head><body>
 <header class="topbar"><div class="wrap"><a class="brand" href="/">${MARK_SVG}<span>Leftover Tag Alerts</span></a>
-${opts.nav === false ? '' : '<nav aria-label="Main"><a href="/#plans">Plans</a>&nbsp;&nbsp;&nbsp;<a href="/#states">States</a>&nbsp;&nbsp;&nbsp;<a href="/#questions">Questions</a></nav>'}</div></header>
+${opts.nav === false ? '' : `<nav aria-label="Main">${isIntro(env) ? '<a href="/#how">How it works</a>' : '<a href="/#plans">Plans</a>'}&nbsp;&nbsp;&nbsp;<a href="/#states">States</a>&nbsp;&nbsp;&nbsp;<a href="/#questions">Questions</a></nav>`}</div></header>
 <main>${body}</main>
 <footer class="site"><div class="wrap"><div>© ${year} ${escapeHtml(env.BUSINESS_NAME)}. Not affiliated with any state wildlife agency.</div>
-<nav aria-label="Footer"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/bot">How we check state sites</a><a href="mailto:${escapeHtml(env.CONTACT_EMAIL)}">Contact</a></nav></div></footer>
+<nav aria-label="Footer">${env.PARTNER_URL ? `<a href="${escapeHtml(env.PARTNER_URL)}">Horn &amp; Fin outfitters and guides</a>` : ''}<a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/bot">How we check state sites</a><a href="mailto:${escapeHtml(env.CONTACT_EMAIL)}">Contact</a></nav></div></footer>
 </body></html>`,
     { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': opts.noindex ? 'no-store' : 'public, max-age=300' } },
   );
@@ -192,6 +192,11 @@ animation:stampIn .5s cubic-bezier(.2,1.6,.4,1) .6s both}
 .recent li{padding:12px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .recent time{color:var(--moss);font-size:14px}
 
+.launch .launch-lead{font-size:20px;max-width:38em;margin:0 0 12px}
+.launch .note{font-size:15px;color:var(--moss);max-width:62em}
+.partner{background:var(--spruce);color:#e6eee9;padding:44px 0}
+.partner h2{color:#fff;font-size:clamp(26px,3.4vw,34px)}
+.partner p{margin:0;max-width:40em}.partner a{color:#fff;font-weight:700}
 .faq details{border-bottom:1px solid var(--line);padding:16px 0;max-width:760px}
 .faq summary{cursor:pointer;font-weight:700;font-size:18px;list-style-position:outside}
 .faq details p{margin:10px 0 0;color:#2c3a33}
@@ -212,12 +217,33 @@ function heroTag(data: HomeData): string {
     return `<div class="tag-hang"><div class="string" aria-hidden="true"></div><div class="tag" role="img" aria-label="Most recent opening: ${escapeHtml(real.title)}">
 <div class="issuer">${escapeHtml((STATES[real.state] ?? real.state).toUpperCase())} BIG GAME</div>
 <dl><dt>OPENING</dt><dd>${escapeHtml(real.title.replace(/^[^:]+:\s*/, ''))}</dd><dt>POSTED</dt><dd>${escapeHtml(timeAgo(real.created_at))}</dd></dl>
-<div class="stamp">JUST OPENED</div></div></div><p class="tag-note">Our most recent public alert. Instant subscribers saw it 12 hours earlier.</p>`;
+<div class="stamp">JUST OPENED</div></div></div><p class="tag-note">Our most recent public alert. Subscribers got it 12 hours earlier.</p>`;
   }
   return `<div class="tag-hang"><div class="string" aria-hidden="true"></div><div class="tag" role="img" aria-label="Example alert: 3 elk tags open in Utah hunt EB3010">
 <div class="issuer">UTAH BIG GAME</div>
 <dl><dt>HUNT</dt><dd>EB3010 Book Cliffs</dd><dt>SPECIES</dt><dd>Bull elk, muzzleloader</dd><dt>LEFT</dt><dd><span class="big">3</span></dd></dl>
 <div class="stamp">JUST OPENED</div></div></div><p class="tag-note">An example of what an alert tells you.</p>`;
+}
+
+function paidPlans(env: Env): string {
+  return `<section id="plans" class="plans"><div class="wrap"><h2>Plans</h2>
+<table><thead><tr><th scope="col"><span class="sr">Feature</span></th><th scope="col">Free<small>$0</small></th><th scope="col" class="instant">Instant<small>${escapeHtml(env.PAID_PRICE_LABEL)}</small></th></tr></thead>
+<tbody>
+<tr><th scope="row">How you hear</th><td>One email each morning</td><td class="instant">Email and text message</td></tr>
+<tr><th scope="row">How fast</th><td>Up to a day later</td><td class="instant">Within about 15 minutes of a change</td></tr>
+<tr><th scope="row">States and species</th><td>You choose</td><td class="instant">You choose</td></tr>
+<tr><th scope="row">Best for</th><td>Keeping an eye on the season</td><td class="instant">Leftover days and returned tags that sell out fast</td></tr>
+</tbody></table>
+<p class="note">Start free with the form above. Every alert email has a link to upgrade or cancel. Instant subscribers who add a cell number and agree to texts get recurring automated alerts; message frequency varies, message and data rates may apply, and replying STOP ends them.</p>
+</div></section>`;
+}
+
+function launchSection(env: Env): string {
+  const texts = textsEnabled(env);
+  return `<section id="plans" class="launch"><div class="wrap"><h2>Free while we launch</h2>
+<p class="launch-lead">Every alert is free during launch. You get an email within about 15 minutes of a state list changing, for whatever states and species you pick.${texts ? ' Add a cell number in your settings to get texts too.' : ' Text alerts are coming soon.'}</p>
+<p class="note">No card needed. If we add paid plans later, current subscribers hear about it first, and nothing changes for you unless you choose to.${texts ? ' Texts are recurring automated alerts; message frequency varies, message and data rates may apply, and replying STOP ends them.' : ''}</p>
+</div></section>`;
 }
 
 export function homePage(env: Env, data: HomeData): Response {
@@ -242,7 +268,7 @@ export function homePage(env: Env, data: HomeData): Response {
   const speciesBoxes = SPECIES.map((s) => `<label><input type="checkbox" name="species" value="${s}" checked> ${s[0].toUpperCase() + s.slice(1)}</label>`).join('');
 
   const recent = data.recent.length
-    ? `<section class="recent"><div class="wrap"><h2>Recent openings</h2><p class="muted">Shown here 12 hours after instant subscribers get them.</p><ul>${data.recent
+    ? `<section class="recent"><div class="wrap"><h2>Recent openings</h2><p class="muted">Shown here 12 hours after subscribers get them.</p><ul>${data.recent
         .map((e) => `<li><a href="${escapeHtml(e.link_url)}" rel="nofollow noopener">${escapeHtml(e.title)}</a><time datetime="${e.created_at}">${timeAgo(e.created_at)}</time></li>`)
         .join('')}</ul></div></section>`
     : '';
@@ -256,7 +282,7 @@ export function homePage(env: Env, data: HomeData): Response {
 <div class="row"><label for="email" class="sr">Email address</label><input id="email" type="email" name="email" placeholder="you@example.com" autocomplete="email" required>
 <button class="btn" type="submit">Send me alerts</button></div>
 <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-<p class="fine">Free daily email. Upgrade to instant email and text alerts any time.</p>
+<p class="fine">${isIntro(env) ? 'Free during launch: instant email alerts for every state and species you pick.' : 'Free daily email. Upgrade to instant email and text alerts any time.'}</p>
 <details><summary>Choose states and species (all selected)</summary>
 <fieldset><legend>Species</legend><div class="pick">${speciesBoxes}</div></fieldset>
 <fieldset><legend>States</legend><div class="picktools"><button type="button" data-all="1">Select all</button><button type="button" data-all="0">Clear</button></div><div class="pick">${stateBoxes}</div></fieldset>
@@ -274,16 +300,8 @@ export function homePage(env: Env, data: HomeData): Response {
 <li><h3>You buy from the state</h3><p>Each alert names the hunt and links straight to that state's license site. We never sell or hold tags.</p></li>
 </ol></div></section>
 
-<section id="plans" class="plans"><div class="wrap"><h2>Plans</h2>
-<table><thead><tr><th scope="col"><span class="sr">Feature</span></th><th scope="col">Free<small>$0</small></th><th scope="col" class="instant">Instant<small>${escapeHtml(env.PAID_PRICE_LABEL)}</small></th></tr></thead>
-<tbody>
-<tr><th scope="row">How you hear</th><td>One email each morning</td><td class="instant">Email and text message</td></tr>
-<tr><th scope="row">How fast</th><td>Up to a day later</td><td class="instant">Within about 15 minutes of a change</td></tr>
-<tr><th scope="row">States and species</th><td>You choose</td><td class="instant">You choose</td></tr>
-<tr><th scope="row">Best for</th><td>Keeping an eye on the season</td><td class="instant">Leftover days and returned tags that sell out fast</td></tr>
-</tbody></table>
-<p class="note">Start free with the form above. Every alert email has a link to upgrade or cancel. Instant subscribers who add a cell number and agree to texts get recurring automated alerts; message frequency varies, message and data rates may apply, and replying STOP ends them.</p>
-</div></section>
+${isIntro(env) ? launchSection(env) : paidPlans(env)}
+
 
 <section id="states" class="states"><div class="wrap"><h2>States we watch</h2>
 ${data.lastChecked ? `<p class="checked"><i aria-hidden="true"></i>Last state check ${timeAgo(data.lastChecked)}</p>` : '<p class="checked">Checks start as soon as the service goes live.</p>'}
@@ -299,7 +317,11 @@ ${recent}
 <details><summary>Do you sell tags?</summary><p>No. Tags are sold only by each state's wildlife agency. We tell you when they open up and link you to the state's license site.</p></details>
 <details><summary>How fast are instant alerts?</summary><p>We check each state list as often as every 15 minutes during its season and send instant alerts right after a change is found. Some states only update their lists once a day or once a week, so an alert can't come sooner than the state posts.</p></details>
 <details><summary>How do I change or stop alerts?</summary><p>Every email has links to change your states and species or unsubscribe. Reply STOP to any text to end texts.</p></details>
+${isIntro(env) ? '<details><summary>Is it really free?</summary><p>Yes. During launch every alert is free, with no card required. If we add paid plans later, current subscribers hear about it first, and nothing changes for you unless you choose to.</p></details>' : ''}
 </div></section>
+
+${env.PARTNER_URL ? `<section class="partner"><div class="wrap"><h2>Drew a tag? Plan the hunt on Horn &amp; Fin</h2>
+<p>Find outfitters, guides and game processors in the state you're hunting on <a href="${escapeHtml(env.PARTNER_URL)}">Horn &amp; Fin</a>, our sister site for hunters and anglers.</p></div></section>` : ''}
 
 <script>
 (function(){
@@ -364,8 +386,8 @@ export function termsPage(env: Env): Response {
 <p>We watch public state wildlife agency web pages and send you an alert when a list of leftover, returned or reissued hunting tags changes. We are not a state agency, we do not sell or reserve tags, and we are not affiliated with any agency.</p>
 <h2>No guarantee of availability</h2>
 <p>States change their pages, post late, or sell out before an alert reaches you. Alerts may be delayed, incomplete or wrong. Always confirm availability, eligibility, point rules and season dates on the state's site before you buy a tag or make travel plans. We are not responsible for tags you could not get or costs you incur.</p>
-<h2>Instant alerts</h2>
-<p>Instant alerts cost ${escapeHtml(env.PAID_PRICE_LABEL)}, billed monthly through Stripe until you cancel. Cancel any time from the billing link in your settings page; you keep instant alerts until the end of the period you paid for. We don't give partial-month refunds.</p>
+<h2>Price</h2>
+${isIntro(env) ? `<p>All alerts are free during our launch period. If we add paid plans later, we'll email current subscribers before anything changes, and you won't be charged unless you choose a paid plan.</p>` : `<p>Instant alerts cost ${escapeHtml(env.PAID_PRICE_LABEL)}, billed monthly through Stripe until you cancel. Cancel any time from the billing link in your settings page; you keep instant alerts until the end of the period you paid for. We don't give partial-month refunds.</p>`}
 <h2>Text messages</h2>
 <p>If you add a mobile number and agree to texts, you'll receive recurring automated tag alerts. Message frequency varies. Message and data rates may apply. Reply STOP to cancel or HELP for help. Carriers are not liable for delayed or undelivered messages.</p>
 <h2>Fair use</h2>

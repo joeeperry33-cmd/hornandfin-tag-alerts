@@ -1,6 +1,6 @@
 import { shell } from './site';
 import type { Env, Subscriber } from './types';
-import { escapeHtml, SPECIES, STATES } from './util';
+import { escapeHtml, isIntro, SPECIES, STATES, textsEnabled } from './util';
 
 const APP_CSS = `
 .app{max-width:760px;margin:0 auto;padding:36px 20px 64px}
@@ -45,13 +45,22 @@ export function managePage(env: Env, sub: Subscriber, flags: { welcome?: boolean
   const states = Object.entries(STATES).sort((a, b) => a[1].localeCompare(b[1]));
   const species = SPECIES.map((s) => [s, s[0].toUpperCase() + s.slice(1)] as [string, string]);
 
-  const plan = paid
-    ? `<div class="panel"><h2>Instant alerts<span class="pill">On</span></h2>
-<p class="muted">You get an email, and a text if you add a number, within about 15 minutes of a tag list changing.</p>
-<label for="phone"><strong>Cell number for texts</strong></label><br>
+  const intro = isIntro(env);
+  const phoneFields = textsEnabled(env)
+    ? `<label for="phone"><strong>Cell number for texts</strong></label><br>
 <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="${escapeHtml(sub.phone ?? '')}" placeholder="(530) 555-0123">
 <label class="consent"><input type="checkbox" name="sms_consent" value="1"${sub.sms_consent_at && !sub.sms_stopped ? ' checked' : ''}>
-<span>I agree to receive recurring automated tag alert text messages from Leftover Tag Alerts at this number. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase. See our <a href="/privacy">privacy policy</a> and <a href="/terms">terms</a>.</span></label>
+<span>I agree to receive recurring automated tag alert text messages from Leftover Tag Alerts at this number. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase. See our <a href="/privacy">privacy policy</a> and <a href="/terms">terms</a>.</span></label>`
+    : '<p class="muted">Text alerts are coming soon. We\'ll email you when you can add your cell number.</p>';
+
+  const plan = intro
+    ? `<div class="panel"><h2>Instant alerts<span class="pill">Free during launch</span></h2>
+<p class="muted">You get an email within about 15 minutes of a tag list changing in the states you pick.</p>
+${phoneFields}</div>`
+    : paid
+    ? `<div class="panel"><h2>Instant alerts<span class="pill">On</span></h2>
+<p class="muted">You get an email${textsEnabled(env) ? ', and a text if you add a number,' : ''} within about 15 minutes of a tag list changing.</p>
+${phoneFields}
 <p style="margin-top:16px"><button type="button" class="btn quiet" id="billing">Manage billing or cancel</button></p></div>`
     : `<div class="panel"><h2>Free daily email</h2>
 <p class="muted">One email each morning with everything that opened up in the last day. Leftover and returned tags often sell out within hours.</p>

@@ -4,7 +4,7 @@ import { managePage, messagePage } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
 import { createCheckout, createPortal, handleStripeEvent, verifyStripeSignature, verifyTwilioSignature } from './stripe';
 import type { AlertEvent, Env, Source, Subscriber } from './types';
-import { json, normalizeEmail, normalizeUsPhone, nowIso, parseList, randomToken, SPECIES, STATES } from './util';
+import { isIntro, json, normalizeEmail, normalizeUsPhone, nowIso, parseList, randomToken, SPECIES, STATES, textsEnabled } from './util';
 import { widgetJs } from './widget';
 
 const STATE_CODES = Object.keys(STATES);
@@ -113,7 +113,7 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
   let phone = sub.phone;
   let consentAt = sub.sms_consent_at;
   let stopped = sub.sms_stopped;
-  if (sub.tier === 'paid' && b.phone !== undefined) {
+  if ((sub.tier === 'paid' || isIntro(env)) && textsEnabled(env) && b.phone !== undefined) {
     const raw = String(b.phone ?? '').trim();
     if (raw === '') { phone = null; consentAt = null; }
     else {
@@ -196,6 +196,7 @@ export default {
       const b = await body(req);
       const sub = await byManageToken(env, b.token);
       if (!sub) return json({ error: 'This link has expired.' }, 401);
+      if (path === '/api/checkout' && isIntro(env)) return json({ error: 'Instant alerts are free during launch. You already have them.' }, 400);
       try {
         const target = path === '/api/checkout' ? await createCheckout(env, sub) : await createPortal(env, sub);
         return json({ url: target });

@@ -1,5 +1,5 @@
 import type { Env } from './types';
-import { SPECIES, STATES } from './util';
+import { isIntro, SPECIES, STATES } from './util';
 
 /**
  * Embeddable sign-up form for other sites (e.g. Horn & Fin). Paste into a WordPress Custom HTML block:
@@ -27,7 +27,7 @@ root.appendChild(el('style',{},css));
 var box=el('form',{class:'ltaw',novalidate:''});
 var sp=SPECIES.map(function(s){return '<label><input type=checkbox name=species value="'+s+'" checked> '+s[0].toUpperCase()+s.slice(1)+'</label>';}).join('');
 var st=STATES.map(function(s){return '<label><input type=checkbox name=states value="'+s[0]+'"'+(pre.length&&pre.indexOf(s[0])<0?'':' checked')+'> '+s[1]+'</label>';}).join('');
-box.innerHTML='<h3>Leftover and returned tag alerts</h3><p>Get an email when states post leftover, returned or reissued big game tags. Free daily email, or instant email and text alerts for ${env.PAID_PRICE_LABEL}. From <a href="${env.SITE_URL}" target="_blank" rel="noopener">Leftover Tag Alerts</a>.</p>'+
+box.innerHTML='<h3>Leftover and returned tag alerts</h3><p>Get an email when states post leftover, returned or reissued big game tags. ${isIntro(env) ? 'Free during launch.' : `Free daily email, or instant email and text alerts for ${env.PAID_PRICE_LABEL}.`} From <a href="${env.SITE_URL}" target="_blank" rel="noopener">Leftover Tag Alerts</a>.</p>'+
 '<input type=email name=email placeholder="you@example.com" autocomplete=email required aria-label="Email">'+
 '<input class=hp type=text name=website tabindex=-1 autocomplete=off aria-hidden=true>'+
 '<details><summary>Species</summary><div class=g>'+sp+'</div></details>'+

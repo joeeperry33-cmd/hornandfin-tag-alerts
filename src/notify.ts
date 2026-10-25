@@ -1,5 +1,5 @@
 import type { AlertEvent, Env, Subscriber } from './types';
-import { escapeHtml, matchesList, nowIso, STATES } from './util';
+import { escapeHtml, isIntro, matchesList, nowIso, STATES } from './util';
 
 const INSTANT_WINDOW_HOURS = 6; // never send an "instant" alert about something older than this
 const DIGEST_WINDOW_HOURS = 26;
@@ -127,13 +127,15 @@ async function recentEvents(env: Env, hours: number): Promise<AlertEvent[]> {
   return results;
 }
 
-/** Paid tier: one email (and one text, if opted in) per event, as soon as it's found. */
+/** Paid tier (everyone during launch): one email (and one text, if opted in) per event, as soon as it's found. */
 export async function sendInstantAlerts(env: Env): Promise<{ emails: number; sms: number }> {
   const events = await recentEvents(env, INSTANT_WINDOW_HOURS);
   if (!events.length) return { emails: 0, sms: 0 };
   const { results: subs } = await env.DB.prepare(
-    `SELECT * FROM subscribers WHERE tier = 'paid' AND verified_at IS NOT NULL AND unsubscribed_at IS NULL`,
-  ).all<Subscriber>();
+    `SELECT * FROM subscribers WHERE (tier = 'paid' OR ?1 = 1) AND verified_at IS NOT NULL AND unsubscribed_at IS NULL`,
+  )
+    .bind(isIntro(env) ? 1 : 0)
+    .all<Subscriber>();
   const ids = events.map((e) => e.id);
   const emailed = await deliveredSet(env, ids, 'email');
   const texted = await deliveredSet(env, ids, 'sms');
@@ -180,6 +182,7 @@ export function smsBody(e: AlertEvent): string {
 
 /** Free tier: one morning email covering everything found in the last day. */
 export async function sendDigests(env: Env): Promise<number> {
+  if (isIntro(env)) return 0; // during launch everyone already gets instant alerts
   const events = await recentEvents(env, DIGEST_WINDOW_HOURS);
   if (!events.length) return 0;
   const { results: subs } = await env.DB.prepare(
