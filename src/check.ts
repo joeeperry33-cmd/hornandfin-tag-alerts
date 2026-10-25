@@ -17,6 +17,12 @@ export function isDue(src: Source, now = new Date()): boolean {
   return elapsed >= backoff - 1;
 }
 
+class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 async function fetchSource(env: Env, src: Source): Promise<{ status: number; body: ArrayBuffer | null }> {
   if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('disallowed by robots.txt');
   let res: Response;
@@ -34,7 +40,12 @@ async function fetchSource(env: Env, src: Source): Promise<{ status: number; bod
   } catch (err) {
     throw new Error(`fetch failed: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
   }
-  if (!res.ok) return { status: res.status, body: null };
+  if (!res.ok) {
+    // Keep a snippet of the error page: it shows which firewall (Akamai, Cloudflare, Imperva...) refused us.
+    const server = res.headers.get('server') ?? '';
+    const snippet = (await res.text().catch(() => '')).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    throw new HttpError(res.status, `HTTP ${res.status}${server ? ` from ${server}` : ''}: ${snippet}`);
+  }
   try {
     return { status: res.status, body: await res.arrayBuffer() };
   } catch (err) {
@@ -210,6 +221,7 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
       .run();
     return events;
   } catch (err) {
+    if (err instanceof HttpError) status = err.status;
     const message = (err instanceof Error ? err.message : String(err)).slice(0, 300);
     console.error(`check ${src.id} failed:`, message);
     await env.DB.prepare('UPDATE sources SET last_checked = ?, last_status = ?, last_error = ?, fail_count = fail_count + 1 WHERE id = ?')
