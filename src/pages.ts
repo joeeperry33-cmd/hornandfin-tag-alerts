@@ -67,7 +67,7 @@ ${phoneFields}
 <button type="button" class="btn" id="upgrade">Get instant email and text alerts for ${escapeHtml(env.PAID_PRICE_LABEL)}</button></div>`;
 
   const body = `<div class="app">${notice}
-<h1>Your alerts</h1><p class="muted">${escapeHtml(sub.email)}</p>
+<h1>Your alerts</h1><p class="muted">${escapeHtml(sub.email)} &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
 <form id="prefs" novalidate>
 ${plan}
 <div class="panel"><h2>Species</h2><div class="grid">${checkboxes('species', species, sub.species)}</div></div>
@@ -86,9 +86,30 @@ form.onsubmit=async e=>{e.preventDefault();errBox.textContent='';
  const vals=n=>[...form.querySelectorAll('input[name='+n+']:checked')].map(c=>c.value);
  if(!vals('states').length||!vals('species').length){errBox.textContent='Pick at least one state and one species.';return;}
  const phone=form.querySelector('[name=phone]');const consent=form.querySelector('[name=sms_consent]');
- try{await post('/api/manage',{states:vals('states'),species:vals('species'),phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.search='?token='+encodeURIComponent(token)+'&saved=1';}catch(err){errBox.textContent=err.message;}};
+ try{await post('/api/manage',{states:vals('states'),species:vals('species'),phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
 const up=document.getElementById('upgrade');if(up)up.onclick=async()=>{try{const d=await post('/api/checkout',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
 const bill=document.getElementById('billing');if(bill)bill.onclick=async()=>{try{const d=await post('/api/billing',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
 </script>`;
   return shell(env, { title: 'Your alerts | Leftover Tag Alerts', noindex: true, nav: false, css: APP_CSS }, body);
+}
+
+export function loginPage(env: Env): Response {
+  const body = `<div class="app"><h1>Sign in</h1>
+<p class="muted">Enter the email you signed up with and we'll send you a link to change your alerts. No password needed.</p>
+<form id="login" class="panel" novalidate>
+<label for="email"><strong>Email</strong></label><br>
+<input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" style="width:100%;max-width:420px;padding:12px;border:1.5px solid var(--line);border-radius:3px;font:17px var(--body);margin:6px 0 14px">
+<br><button type="submit" class="btn">Email me a sign-in link</button>
+<div class="err" role="alert"></div></form>
+<p class="muted">Not signed up yet? <a href="/">Get alerts on the home page</a>.</p></div>
+<script>
+const f=document.getElementById('login');const err=f.querySelector('.err');
+f.onsubmit=async e=>{e.preventDefault();err.textContent='';const email=f.email.value.trim();
+ if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){err.textContent='Enter a valid email address.';return;}
+ const btn=f.querySelector('button');btn.disabled=true;btn.textContent='Sending…';
+ try{const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Something went wrong. Try again.');
+  f.outerHTML='<div class="notice" role="status"><strong>Check your inbox.</strong> If that email is signed up, a sign-in link is on its way. It can take a minute, and it may land in spam.</div>';}
+ catch(x){err.textContent=x.message;btn.disabled=false;btn.textContent='Email me a sign-in link';}};
+</script>`;
+  return shell(env, { title: 'Sign in | Leftover Tag Alerts', noindex: true, nav: false, css: APP_CSS }, body);
 }

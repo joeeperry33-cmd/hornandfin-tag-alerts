@@ -1,6 +1,6 @@
 import { runChecks } from './check';
-import { sendDigests, sendInstantAlerts, sendVerification } from './notify';
-import { managePage, messagePage } from './pages';
+import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
+import { loginPage, managePage, messagePage } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
 import { createCheckout, createPortal, handleStripeEvent, verifyStripeSignature, verifyTwilioSignature } from './stripe';
 import type { AlertEvent, Env, Source, Subscriber } from './types';
@@ -37,6 +37,59 @@ async function byManageToken(env: Env, token: unknown): Promise<Subscriber | nul
   return env.DB.prepare('SELECT * FROM subscribers WHERE manage_token = ?').bind(token).first<Subscriber>();
 }
 
+const SESSION_COOKIE = 'lta_session';
+const SESSION_DAYS = 180;
+
+/** Shared per-IP limit for sign-ups and sign-in requests. Records the attempt. */
+async function rateLimited(env: Env, req: Request): Promise<boolean> {
+  const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
+  const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+  const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM signup_log WHERE ip = ? AND created_at >= ?').bind(ip, hourAgo).first<{ n: number }>();
+  if ((recent?.n ?? 0) >= SIGNUPS_PER_IP_PER_HOUR) return true;
+  await env.DB.prepare('INSERT INTO signup_log (ip, created_at) VALUES (?, ?)').bind(ip, nowIso()).run();
+  return false;
+}
+
+/** Confirmed subscribers get a sign-in link; unconfirmed ones get a fresh confirmation link. */
+async function sendAccessEmail(env: Env, sub: Subscriber): Promise<void> {
+  if (sub.verified_at) {
+    await sendSignInLink(env, sub);
+    return;
+  }
+  const verifyToken = randomToken();
+  await env.DB.prepare('UPDATE subscribers SET verify_token = ? WHERE id = ?').bind(verifyToken, sub.id).run();
+  await sendVerification(env, { ...sub, verify_token: verifyToken });
+}
+
+export function readCookie(req: Request, name: string): string | null {
+  const header = req.headers.get('cookie') ?? '';
+  for (const part of header.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return decodeURIComponent(v.join('='));
+  }
+  return null;
+}
+
+function sessionCookie(token: string, url: URL): string {
+  const secure = url.protocol === 'https:' ? '; Secure' : '';
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${SESSION_DAYS * 86400}; HttpOnly; SameSite=Lax${secure}`;
+}
+
+function redirect(location: string, headers: Record<string, string> = {}): Response {
+  return new Response(null, { status: 302, headers: { location, 'cache-control': 'no-store', ...headers } });
+}
+
+async function signInRequest(env: Env, req: Request): Promise<Response> {
+  const b = await body(req);
+  const email = normalizeEmail(String(b.email ?? ''));
+  if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+  if (await rateLimited(env, req)) return json({ error: 'Too many requests from here. Try again in an hour.' }, 429);
+  const sub = await env.DB.prepare('SELECT * FROM subscribers WHERE email = ?').bind(email).first<Subscriber>();
+  if (sub) await sendAccessEmail(env, sub);
+  // Same answer whether or not the address is subscribed.
+  return json({ ok: true });
+}
+
 async function subscribe(env: Env, req: Request): Promise<Response> {
   const h = cors(env, req);
   const b = await body(req);
@@ -44,20 +97,16 @@ async function subscribe(env: Env, req: Request): Promise<Response> {
   const email = normalizeEmail(String(b.email ?? ''));
   if (!email) return json({ error: 'Enter a valid email address.' }, 400, h);
 
-  const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
-  const hourAgo = new Date(Date.now() - 3600_000).toISOString();
-  const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM signup_log WHERE ip = ? AND created_at >= ?').bind(ip, hourAgo).first<{ n: number }>();
-  if ((recent?.n ?? 0) >= SIGNUPS_PER_IP_PER_HOUR) return json({ error: 'Too many sign-ups from here. Try again in an hour.' }, 429, h);
-  await env.DB.prepare('INSERT INTO signup_log (ip, created_at) VALUES (?, ?)').bind(ip, nowIso()).run();
+  if (await rateLimited(env, req)) return json({ error: 'Too many requests from here. Try again in an hour.' }, 429, h);
 
   const states = parseList(b.states, STATE_CODES, true);
   const species = parseList(b.species, SPECIES, false);
   const existing = await env.DB.prepare('SELECT * FROM subscribers WHERE email = ?').bind(email).first<Subscriber>();
   if (existing) {
-    // Never change an existing account from an unauthenticated form; just re-send the confirm link.
-    const verifyToken = randomToken();
-    await env.DB.prepare('UPDATE subscribers SET verify_token = ? WHERE id = ?').bind(verifyToken, existing.id).run();
-    await sendVerification(env, { ...existing, verify_token: verifyToken });
+    // Never change an existing account from an unauthenticated form. Confirmed subscribers get a
+    // sign-in link instead; unconfirmed ones get a fresh confirmation link. The response is the same
+    // either way, so the form never reveals who is subscribed.
+    await sendAccessEmail(env, existing);
     return json({ ok: true }, 200, h);
   }
   const sub: Subscriber = {
@@ -182,9 +231,28 @@ export default {
     if (path === '/api/manage' && req.method === 'POST') return manageUpdate(env, req);
     if (path === '/api/sms/inbound' && req.method === 'POST') return smsInbound(env, req);
 
+    if (path === '/login') {
+      if (await byManageToken(env, readCookie(req, SESSION_COOKIE))) return redirect('/manage');
+      return loginPage(env);
+    }
+    if (path === '/api/login' && req.method === 'POST') return signInRequest(env, req);
+    if (path === '/logout') {
+      return redirect('/', { 'set-cookie': `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax` });
+    }
+
     if (path === '/manage') {
-      const sub = await byManageToken(env, url.searchParams.get('token'));
-      if (!sub) return messagePage(env, 'Link expired', 'That link is no longer valid. Sign up again on the <a href="/">home page</a> to get a new one.');
+      const linkToken = url.searchParams.get('token');
+      if (linkToken) {
+        // Arrived from an email link: remember the browser, then drop the token from the address bar.
+        const sub = await byManageToken(env, linkToken);
+        if (!sub) return messagePage(env, 'Link expired', 'That link is no longer valid. <a href="/login">Sign in</a> to get a new one.');
+        const clean = new URLSearchParams(url.searchParams);
+        clean.delete('token');
+        const qs = clean.toString();
+        return redirect(`/manage${qs ? `?${qs}` : ''}`, { 'set-cookie': sessionCookie(sub.manage_token, url) });
+      }
+      const sub = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!sub) return redirect('/login');
       return managePage(env, sub, {
         welcome: url.searchParams.has('welcome'),
         upgraded: url.searchParams.has('upgraded'),

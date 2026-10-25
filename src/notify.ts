@@ -227,3 +227,14 @@ export async function sendVerification(env: Env, sub: Subscriber): Promise<boole
   ]);
   return ok;
 }
+
+export async function sendSignInLink(env: Env, sub: Subscriber): Promise<boolean> {
+  const url = `${env.API_URL}/manage?token=${encodeURIComponent(sub.manage_token)}`;
+  const inner = `<div style="font-size:16px;line-height:1.5">Here's your link to sign in and change your tag alerts.</div>
+<p><a href="${url}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:10px 16px;border-radius:3px;font-weight:bold">Sign in to my alerts</a></p>
+<div style="font-size:13px;color:#5b6b5e">Didn't ask for this? You can ignore it. Nothing changes unless you use the link.</div>`;
+  const [ok] = await sendEmails(env, [
+    { to: sub.email, subject: 'Your Leftover Tag Alerts sign-in link', html: layout(env, sub, inner), text: `Sign in to change your tag alerts: ${url}` },
+  ]);
+  return ok;
+}

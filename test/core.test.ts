@@ -218,3 +218,12 @@ describe('site', () => {
     expect(timeAgo('2026-10-21T12:00:00Z', now)).toBe('4 days ago');
   });
 });
+
+describe('sign-in cookie', () => {
+  it('reads the session cookie among others', async () => {
+    const { readCookie } = await import('../src/index');
+    const req = new Request('https://leftovertagalerts.com/manage', { headers: { cookie: 'a=1; lta_session=abc%3D%3D; b=2' } });
+    expect(readCookie(req, 'lta_session')).toBe('abc==');
+    expect(readCookie(req, 'missing')).toBeNull();
+  });
+});

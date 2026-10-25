@@ -20,7 +20,8 @@ export const BASE_CSS = `
 :root{--spruce:#1f3d35;--spruce-2:#173029;--ink:#15211c;--blaze:#ff6a13;--manila:#e8d49a;--manila-edge:#c9b16c;--lichen:#e4e9e1;--paper:#f7f9f5;--moss:#4f5c55;--line:#c4cdc6;
 --display:'Big Shoulders Display','Big Shoulders','Oswald','Arial Narrow',Impact,sans-serif;--body:'Public Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--lichen);color:var(--ink);font:17px/1.6 var(--body)}
+body{margin:0;background:var(--lichen);color:var(--ink);font:17px/1.6 var(--body);min-height:100vh;display:flex;flex-direction:column}
+main{flex:1}
 a{color:var(--spruce);text-underline-offset:2px}a:hover{color:var(--ink)}
 :focus-visible{outline:3px solid var(--blaze);outline-offset:2px}
 .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
@@ -41,7 +42,8 @@ footer.site{background:var(--spruce-2);color:#c9d6ce;font-size:14px;padding:32px
 footer.site a{color:#fff}footer.site .wrap{display:flex;flex-wrap:wrap;gap:12px 28px;justify-content:space-between}
 footer.site nav{display:flex;flex-wrap:wrap;gap:8px 20px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:560px){.topbar nav{display:none}}
+@media (max-width:560px){.topbar nav a:not(.signin){display:none}.topbar nav{font-size:15px}}
+.topbar nav a.signin{font-weight:700;color:#fff}
 `;
 
 export const MARK_SVG = `<svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M5 1h16l4 4v24H1V5z" fill="#e8d49a"/><circle cx="13" cy="7" r="2.6" fill="#1f3d35"/><circle cx="13" cy="7" r="4.2" fill="none" stroke="#c9b16c" stroke-width="1.4"/><rect x="5" y="15" width="16" height="2.4" fill="#1f3d35"/><rect x="5" y="20" width="10" height="2.4" fill="#ff6a13"/></svg>`;
@@ -73,7 +75,7 @@ ${opts.noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonica
 <meta name="theme-color" content="#1f3d35"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
 ${FONTS}<style>${BASE_CSS}${opts.css ?? ''}</style></head><body>
 <header class="topbar"><div class="wrap"><a class="brand" href="/">${MARK_SVG}<span>Leftover Tag Alerts</span></a>
-${opts.nav === false ? '' : `<nav aria-label="Main">${isIntro(env) ? '<a href="/#how">How it works</a>' : '<a href="/#plans">Plans</a>'}&nbsp;&nbsp;&nbsp;<a href="/#states">States</a>&nbsp;&nbsp;&nbsp;<a href="/#questions">Questions</a></nav>`}</div></header>
+${opts.nav === false ? '' : `<nav aria-label="Main">${isIntro(env) ? '<a href="/#how">How it works</a>' : '<a href="/#plans">Plans</a>'}&nbsp;&nbsp;&nbsp;<a href="/#states">States</a>&nbsp;&nbsp;&nbsp;<a href="/#questions">Questions</a>&nbsp;&nbsp;&nbsp;<a href="/login" class="signin">Sign in</a></nav>`}</div></header>
 <main>${body}</main>
 <footer class="site"><div class="wrap"><div>© ${year} ${escapeHtml(env.BUSINESS_NAME)}. Not affiliated with any state wildlife agency.</div>
 <nav aria-label="Footer">${env.PARTNER_URL ? `<a href="${escapeHtml(env.PARTNER_URL)}">Horn &amp; Fin outfitters and guides</a>` : ''}<a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/bot">How we check state sites</a><a href="mailto:${escapeHtml(env.CONTACT_EMAIL)}">Contact</a></nav></div></footer>
@@ -132,6 +134,7 @@ const HOME_CSS = `
 .signup .row{display:flex;gap:8px}
 .signup input[type=email]{flex:1;min-width:0;padding:13px 14px;border:0;border-radius:3px;font:16px var(--body);color:var(--ink);background:#fff}
 .signup .fine{font-size:14px;color:#b9cbbf;margin:10px 0 0}
+.signup .already{margin-top:14px}.signup .already a{color:#fff;font-weight:600}
 .signup details{margin-top:14px;color:#e6eee9}
 .signup summary{cursor:pointer;font-weight:600;font-size:15px}
 .signup fieldset{border:0;padding:0;margin:12px 0 0}
@@ -277,7 +280,7 @@ export function homePage(env: Env, data: HomeData): Response {
 <section class="hero"><div class="wrap">
 <div>
 <h1>Leftover and returned tags, the minute states post them</h1>
-<p class="lede">States put unsold and returned big game tags back on sale all season, often with no points needed. The good ones are gone within hours. We watch ${listCount} state lists, as often as every 15 minutes, and tell you when something opens up.</p>
+<p class="lede">States put unsold and returned big game tags back on sale all season, often with no points needed. The good ones are gone within hours. We watch ${listCount} state list${listCount === 1 ? '' : 's'}, as often as every 15 minutes, and tell you when something opens up.</p>
 <form class="signup" id="signup" novalidate>
 <div class="row"><label for="email" class="sr">Email address</label><input id="email" type="email" name="email" placeholder="you@example.com" autocomplete="email" required>
 <button class="btn" type="submit">Send me alerts</button></div>
@@ -288,6 +291,7 @@ export function homePage(env: Env, data: HomeData): Response {
 <fieldset><legend>States</legend><div class="picktools"><button type="button" data-all="1">Select all</button><button type="button" data-all="0">Clear</button></div><div class="pick">${stateBoxes}</div></fieldset>
 </details>
 <div class="form-msg" role="status" aria-live="polite"></div>
+<p class="fine already">Already signed up? <a href="/login">Sign in to change your alerts</a>.</p>
 </form>
 </div>
 <div class="tag-stage">${heroTag(data)}</div>
