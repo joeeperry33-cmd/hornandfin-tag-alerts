@@ -21,13 +21,14 @@ One Cloudflare Worker runs the whole thing: the website (home, privacy, terms, b
 
 ## Coverage (Oct 2026)
 
-**Watching (20 lists, 18 states):** CO (leftover list + weekly reissue list), UT, ID (leftovers + returned tags), WY, AZ, OR, CA (deer), IA, SD, ND, KS, MI (bear), AR, PA, MA, NY, VT, ME.
+**Watching (16 lists, 14 states):** CO (leftover list + weekly reissue list), UT, ID (leftovers + returned tags), WY, OR, CA (deer), IA, SD, ND, KS, AR, PA, NY, VT.
 
 **Off for now (17 rows)**, reasons in each row's `notes` in `migrations/0002_sources.sql`:
 - Page loads by JavaScript, needs its data URL found: FL, WI, IL
 - URL changes every year: NM, NE, TN. Update before each season, then set `active = 1`
 - Nothing public to watch (login-only, alternates, nothing published): MT, NV, AK, MN, TX, NJ, CT, NC, KY, HI
 - robots.txt blocks automated agents: WA
+- State firewall blocks automated checks (403): AZ, MA, ME, MI. Ask each agency to allow the `LeftoverTagAlerts` user agent; /bot explains it.
 
 ## Deploy
 
