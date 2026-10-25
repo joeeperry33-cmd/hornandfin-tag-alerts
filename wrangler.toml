@@ -2,6 +2,15 @@ name = "leftover-tag-alerts"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
+# Serve the site on leftovertagalerts.com and www (www redirects to the main domain in code).
+# Cloudflare creates the DNS records and certificates on deploy.
+routes = [
+  { pattern = "leftovertagalerts.com", custom_domain = true },
+  { pattern = "www.leftovertagalerts.com", custom_domain = true },
+]
+# Keep the leftover-tag-alerts.<subdomain>.workers.dev test address working too.
+workers_dev = true
+
 # Every 15 minutes: check state pages and send instant alerts to paid subscribers.
 # 14:30 UTC (7:30am Pacific in summer): send the free daily digest.
 [triggers]
