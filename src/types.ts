@@ -1,8 +1,13 @@
 export interface Env {
   DB: D1Database;
+  SITE_NAME: string;
   SITE_URL: string;
   API_URL: string;
+  EMBED_ORIGINS?: string;
   FROM_EMAIL: string;
+  CONTACT_EMAIL: string;
+  BUSINESS_NAME: string;
+  BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
   USER_AGENT: string;
   RESEND_API_KEY?: string;

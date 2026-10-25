@@ -140,7 +140,7 @@ describe('scheduling', () => {
 
 describe('robots.txt', () => {
   const robots = parseRobots(`User-agent: *\nDisallow: /admin\nDisallow: /Documents/\nAllow: /Documents/Leftover.pdf\n\nUser-agent: GPTBot\nUser-agent: ClaudeBot\nDisallow: /\n`);
-  const ua = 'HornAndFinTagAlerts/0.1 (+https://hornandfin.com)';
+  const ua = 'LeftoverTagAlerts/0.2 (+https://leftovertagalerts.com/bot)';
   it('applies the * group to our bot, longest match wins', () => {
     expect(isAllowed(robots, ua, '/Documents/Leftover.pdf')).toBe(true);
     expect(isAllowed(robots, ua, '/Documents/Other.pdf')).toBe(false);
@@ -195,5 +195,26 @@ describe('stripe webhook signature', () => {
     expect(await verifyStripeSignature(payload + ' ', `t=${t},v1=${v1}`, 'whsec_test', t + 10)).toBe(false);
     expect(await verifyStripeSignature(payload, `t=${t},v1=${v1}`, 'whsec_test', t + 1000)).toBe(false);
     expect(await verifyStripeSignature(payload, null, 'whsec_test', t)).toBe(false);
+  });
+});
+
+describe('site', () => {
+  const env = { SITE_URL: 'https://leftovertagalerts.com', EMBED_ORIGINS: 'hornandfin.com, landownertagauctions.com' } as never;
+  it('allows our own site and listed embed sites only', async () => {
+    const { allowedOrigin } = await import('../src/index');
+    expect(allowedOrigin(env, 'https://leftovertagalerts.com')).toBe(true);
+    expect(allowedOrigin(env, 'https://www.hornandfin.com')).toBe(true);
+    expect(allowedOrigin(env, 'https://landownertagauctions.com')).toBe(true);
+    expect(allowedOrigin(env, 'https://evil.example')).toBe(false);
+    expect(allowedOrigin(env, 'https://hornandfin.com.evil.example')).toBe(false);
+    expect(allowedOrigin(env, null)).toBe(false);
+  });
+  it('formats relative times', async () => {
+    const { timeAgo } = await import('../src/site');
+    const now = Date.parse('2026-10-25T12:00:00Z');
+    expect(timeAgo('2026-10-25T11:59:40Z', now)).toBe('just now');
+    expect(timeAgo('2026-10-25T11:54:00Z', now)).toBe('6 minutes ago');
+    expect(timeAgo('2026-10-25T11:00:00Z', now)).toBe('1 hour ago');
+    expect(timeAgo('2026-10-21T12:00:00Z', now)).toBe('4 days ago');
   });
 });

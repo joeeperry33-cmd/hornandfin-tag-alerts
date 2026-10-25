@@ -68,15 +68,15 @@ function listHeaders(env: Env, sub: Subscriber): Record<string, string> {
 }
 
 function layout(env: Env, sub: Subscriber, inner: string): string {
-  return `<!doctype html><html><body style="margin:0;background:#f4f1ea;font-family:Arial,Helvetica,sans-serif;color:#1d2a1f">
+  return `<!doctype html><html><body style="margin:0;background:#e4e9e1;font-family:Arial,Helvetica,sans-serif;color:#15211c">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden">
-<tr><td style="background:#1f3a2a;color:#ffffff;padding:16px 24px;font-size:18px;font-weight:bold">Horn &amp; Fin <span style="color:#f07c1b">Tag Alerts</span></td></tr>
+<table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border-radius:6px;overflow:hidden">
+<tr><td style="background:#1f3d35;color:#ffffff;padding:16px 24px;font-size:18px;font-weight:bold;letter-spacing:.2px"><a href="${env.SITE_URL}" style="color:#ffffff;text-decoration:none">Leftover Tag Alerts</a></td></tr>
 <tr><td style="padding:24px">${inner}</td></tr>
-<tr><td style="padding:16px 24px;background:#f4f1ea;font-size:12px;color:#5b6b5e;line-height:1.5">
+<tr><td style="padding:16px 24px;background:#e4e9e1;font-size:12px;color:#4f5c55;line-height:1.6">
 Tag availability changes fast and is set by each state agency. Always confirm on the state's site before you travel.<br>
-<a href="${manageUrl(env, sub)}" style="color:#1f3a2a">Change states or species</a> · <a href="${unsubscribeUrl(env, sub)}" style="color:#1f3a2a">Unsubscribe</a><br>
-Horn &amp; Fin · Perry Capital LLC · 158 Valley View Dr, Auburn, CA 95603
+<a href="${manageUrl(env, sub)}" style="color:#1f3d35">Change states or species</a> &nbsp;|&nbsp; <a href="${unsubscribeUrl(env, sub)}" style="color:#1f3d35">Unsubscribe</a><br>
+${escapeHtml(env.SITE_NAME)}, operated by ${escapeHtml(env.BUSINESS_NAME)}<br>${escapeHtml(env.BUSINESS_ADDRESS)}
 </td></tr></table></td></tr></table></body></html>`;
 }
 
@@ -84,9 +84,9 @@ function eventBlock(e: AlertEvent): string {
   const detail = e.detail
     ? `<div style="margin:8px 0 12px;font-size:14px;line-height:1.5;color:#33433a">${escapeHtml(e.detail).replace(/\n/g, '<br>')}</div>`
     : '';
-  return `<div style="border-left:4px solid #f07c1b;padding:4px 0 4px 12px;margin:0 0 20px">
+  return `<div style="border-left:4px solid #ff6a13;padding:4px 0 4px 12px;margin:0 0 20px">
 <div style="font-size:16px;font-weight:bold">${escapeHtml(e.title)}</div>${detail}
-<a href="${escapeHtml(e.link_url)}" style="display:inline-block;background:#f07c1b;color:#ffffff;text-decoration:none;padding:8px 14px;border-radius:4px;font-size:14px;font-weight:bold">Go to the ${escapeHtml(STATES[e.state] ?? e.state)} site</a></div>`;
+<a href="${escapeHtml(e.link_url)}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:9px 14px;border-radius:3px;font-size:14px;font-weight:bold">Go to the ${escapeHtml(STATES[e.state] ?? e.state)} site</a></div>`;
 }
 
 function eventText(e: AlertEvent): string {
@@ -172,7 +172,7 @@ export async function sendInstantAlerts(env: Env): Promise<{ emails: number; sms
 }
 
 export function smsBody(e: AlertEvent): string {
-  const head = `Horn & Fin: ${e.title}`;
+  const head = `Leftover Tag Alerts: ${e.title}`;
   const tail = ` ${e.link_url} Reply STOP to end.`;
   const room = 300 - tail.length;
   return (head.length > room ? head.slice(0, room - 1) + '…' : head) + tail;
@@ -191,8 +191,8 @@ export async function sendDigests(env: Env): Promise<number> {
   for (const s of subs) {
     const mine = events.filter((e) => wants(s, e) && !done.has(`${e.id}:${s.id}`));
     if (!mine.length) continue;
-    const upsell = `<div style="background:#f4f1ea;border-radius:6px;padding:12px 14px;font-size:14px;margin-top:8px">
-Leftover and returned tags often sell out within hours. <a href="${manageUrl(env, s)}" style="color:#1f3a2a;font-weight:bold">Get instant email and text alerts</a> for ${escapeHtml(env.PAID_PRICE_LABEL)}.</div>`;
+    const upsell = `<div style="background:#e4e9e1;border-radius:4px;padding:12px 14px;font-size:14px;margin-top:8px">
+Leftover and returned tags often sell out within hours. <a href="${manageUrl(env, s)}" style="color:#1f3d35;font-weight:bold">Get instant email and text alerts</a> for ${escapeHtml(env.PAID_PRICE_LABEL)}.</div>`;
     batch.push({
       eventIds: mine.map((e) => e.id),
       subId: s.id,
@@ -217,10 +217,10 @@ Leftover and returned tags often sell out within hours. <a href="${manageUrl(env
 export async function sendVerification(env: Env, sub: Subscriber): Promise<boolean> {
   const url = `${env.API_URL}/api/verify?token=${encodeURIComponent(sub.verify_token)}`;
   const inner = `<div style="font-size:16px;line-height:1.5">Confirm your email to start getting leftover and returned tag alerts.</div>
-<p><a href="${url}" style="display:inline-block;background:#f07c1b;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:4px;font-weight:bold">Confirm my alerts</a></p>
+<p><a href="${url}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:10px 16px;border-radius:3px;font-weight:bold">Confirm my alerts</a></p>
 <div style="font-size:13px;color:#5b6b5e">Didn't sign up? Ignore this email and you won't hear from us.</div>`;
   const [ok] = await sendEmails(env, [
-    { to: sub.email, subject: 'Confirm your Horn & Fin tag alerts', html: layout(env, sub, inner), text: `Confirm your tag alerts: ${url}` },
+    { to: sub.email, subject: 'Confirm your Leftover Tag Alerts sign-up', html: layout(env, sub, inner), text: `Confirm your tag alerts: ${url}` },
   ]);
   return ok;
 }

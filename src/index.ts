@@ -1,6 +1,7 @@
 import { runChecks } from './check';
 import { sendDigests, sendInstantAlerts, sendVerification } from './notify';
 import { managePage, messagePage } from './pages';
+import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
 import { createCheckout, createPortal, handleStripeEvent, verifyStripeSignature, verifyTwilioSignature } from './stripe';
 import type { AlertEvent, Env, Source, Subscriber } from './types';
 import { json, normalizeEmail, normalizeUsPhone, nowIso, parseList, randomToken, SPECIES, STATES } from './util';
@@ -9,13 +10,21 @@ import { widgetJs } from './widget';
 const STATE_CODES = Object.keys(STATES);
 const SIGNUPS_PER_IP_PER_HOUR = 5;
 
-function cors(env: Env, req: Request): Record<string, string> {
-  const origin = req.headers.get('origin') ?? '';
-  const site = new URL(env.SITE_URL).hostname.replace(/^www\./, '');
+/** Origins allowed to call the API from a browser: our own site plus any site embedding the form. */
+export function allowedOrigin(env: Env, origin: string | null): boolean {
+  if (!origin) return false;
   let host = '';
-  try { host = new URL(origin).hostname.replace(/^www\./, ''); } catch { /* no origin */ }
-  return host === site
-    ? { 'access-control-allow-origin': origin, 'access-control-allow-methods': 'POST, GET, OPTIONS', 'access-control-allow-headers': 'content-type', vary: 'origin' }
+  try { host = new URL(origin).hostname.replace(/^www\./, ''); } catch { return false; }
+  const allowed = [new URL(env.SITE_URL).hostname, ...(env.EMBED_ORIGINS ?? '').split(',')]
+    .map((h) => h.trim().replace(/^www\./, ''))
+    .filter(Boolean);
+  return allowed.includes(host);
+}
+
+function cors(env: Env, req: Request): Record<string, string> {
+  const origin = req.headers.get('origin');
+  return allowedOrigin(env, origin)
+    ? { 'access-control-allow-origin': origin!, 'access-control-allow-methods': 'POST, GET, OPTIONS', 'access-control-allow-headers': 'content-type', vary: 'origin' }
     : {};
 }
 
@@ -80,7 +89,7 @@ async function subscribe(env: Env, req: Request): Promise<Response> {
 async function verify(env: Env, url: URL): Promise<Response> {
   const token = url.searchParams.get('token') ?? '';
   const sub = token.length >= 20 ? await env.DB.prepare('SELECT * FROM subscribers WHERE verify_token = ?').bind(token).first<Subscriber>() : null;
-  if (!sub) return messagePage(env, 'Link expired', 'That confirmation link is no longer valid. Sign up again on Horn &amp; Fin to get a fresh one.');
+  if (!sub) return messagePage(env, 'Link expired', 'That confirmation link is no longer valid. Sign up again on the <a href="/">home page</a> to get a fresh one.');
   await env.DB.prepare('UPDATE subscribers SET verified_at = COALESCE(verified_at, ?), unsubscribed_at = NULL, verify_token = ? WHERE id = ?')
     .bind(nowIso(), randomToken(), sub.id)
     .run();
@@ -159,6 +168,10 @@ export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
+    if (url.hostname.startsWith('www.')) {
+      url.hostname = url.hostname.slice(4);
+      return Response.redirect(url.toString(), 301);
+    }
 
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(env, req) });
     if (path === '/widget.js') return widgetJs(env);
@@ -171,7 +184,7 @@ export default {
 
     if (path === '/manage') {
       const sub = await byManageToken(env, url.searchParams.get('token'));
-      if (!sub) return messagePage(env, 'Link expired', 'That link is no longer valid. Sign up again on Horn &amp; Fin to get a new one.');
+      if (!sub) return messagePage(env, 'Link expired', 'That link is no longer valid. Sign up again on the <a href="/">home page</a> to get a new one.');
       return managePage(env, sub, {
         welcome: url.searchParams.has('welcome'),
         upgraded: url.searchParams.has('upgraded'),
@@ -221,8 +234,17 @@ export default {
       }
     }
 
-    if (path === '/') return Response.redirect(`${env.SITE_URL}/tag-alerts/`, 302);
-    return new Response('not found', { status: 404 });
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      if (path === '/') return homePage(env, await loadHomeData(env));
+      if (path === '/privacy') return privacyPage(env);
+      if (path === '/terms') return termsPage(env);
+      if (path === '/bot') return botPage(env);
+      if (path === '/robots.txt') return robotsTxt(env);
+      if (path === '/sitemap.xml') return sitemapXml(env);
+      if (path === '/favicon.svg' || path === '/favicon.ico') return faviconSvg();
+    }
+    const notFound = messagePage(env, 'Page not found', 'There\'s nothing at this address.');
+    return new Response(notFound.body, { status: 404, headers: notFound.headers });
   },
 
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {

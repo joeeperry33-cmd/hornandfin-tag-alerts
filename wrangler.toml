@@ -1,4 +1,4 @@
-name = "hornandfin-tag-alerts"
+name = "leftover-tag-alerts"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
@@ -9,17 +9,23 @@ crons = ["*/15 * * * *", "30 14 * * *"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "hornandfin-tag-alerts"
-database_id = "1407b4b8-62e9-40fb-8910-b386792ccf0c"
+database_name = "leftover-tag-alerts"
+database_id = "0dc4b709-d7d3-47b4-801a-1f9f81d8bc4f"
 
 [vars]
-SITE_URL = "https://hornandfin.com"
-API_URL = "https://alerts.hornandfin.com"
-FROM_EMAIL = "Horn & Fin Tag Alerts <alerts@hornandfin.com>"
+SITE_NAME = "Leftover Tag Alerts"
+SITE_URL = "https://leftovertagalerts.com"
+API_URL = "https://leftovertagalerts.com"
+# Other sites allowed to embed the sign-up form (widget.js). Comma list of hostnames.
+EMBED_ORIGINS = "hornandfin.com,landownertagauctions.com"
+FROM_EMAIL = "Leftover Tag Alerts <alerts@leftovertagalerts.com>"
+CONTACT_EMAIL = "support@leftovertagalerts.com"
+BUSINESS_NAME = "Perry Capital LLC"
+BUSINESS_ADDRESS = "158 Valley View Dr, Auburn, CA 95603"
 PAID_PRICE_LABEL = "$4.99/month"
-USER_AGENT = "HornAndFinTagAlerts/0.1 (+https://hornandfin.com/tag-alerts; alerts@hornandfin.com)"
+USER_AGENT = "LeftoverTagAlerts/0.2 (+https://leftovertagalerts.com/bot)"
 
-# Secrets (set with `wrangler secret put NAME`, never commit them):
+# Secrets (set with `wrangler secret put NAME` or in the dashboard, never commit them):
 #   RESEND_API_KEY        email sending (resend.com)
 #   TWILIO_ACCOUNT_SID    text messages
 #   TWILIO_AUTH_TOKEN

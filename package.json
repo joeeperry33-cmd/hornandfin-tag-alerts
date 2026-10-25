@@ -1,13 +1,13 @@
 {
-  "name": "hornandfin-tag-alerts",
+  "name": "leftover-tag-alerts",
   "version": "0.1.0",
   "private": true,
-  "description": "Leftover and returned hunting tag alerts for hornandfin.com",
+  "description": "Leftover and returned hunting tag alerts — leftovertagalerts.com",
   "scripts": {
     "dev": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute hornandfin-tag-alerts --remote --file=migrations/0001_init.sql",
-    "db:seed": "wrangler d1 execute hornandfin-tag-alerts --remote --file=migrations/0002_sources.sql",
+    "db:init": "wrangler d1 execute leftover-tag-alerts --remote --file=migrations/0001_init.sql",
+    "db:seed": "wrangler d1 execute leftover-tag-alerts --remote --file=migrations/0002_sources.sql",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

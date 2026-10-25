@@ -1,4 +1,4 @@
--- Horn & Fin tag alerts schema (Cloudflare D1 / SQLite)
+-- Leftover Tag Alerts schema (Cloudflare D1 / SQLite)
 
 -- One row per state page we watch.
 CREATE TABLE IF NOT EXISTS sources (
