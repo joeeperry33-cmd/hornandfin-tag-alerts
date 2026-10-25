@@ -40,6 +40,7 @@ export interface Source {
   last_changed: string | null;
   last_status: number | null;
   fail_count: number;
+  last_error?: string | null;
 }
 
 export interface Subscriber {

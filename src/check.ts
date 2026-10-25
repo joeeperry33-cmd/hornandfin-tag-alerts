@@ -18,18 +18,28 @@ export function isDue(src: Source, now = new Date()): boolean {
 }
 
 async function fetchSource(env: Env, src: Source): Promise<{ status: number; body: ArrayBuffer | null }> {
-  if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('blocked by robots.txt');
-  const res = await fetch(src.url, {
-    headers: {
-      'user-agent': env.USER_AGENT,
-      accept: src.format === 'pdf' ? 'application/pdf,*/*' : 'text/html,application/xhtml+xml,text/csv,application/json,*/*',
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(20000),
-    cf: { cacheTtl: 0 },
-  } as RequestInit);
+  if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('disallowed by robots.txt');
+  let res: Response;
+  try {
+    res = await fetch(src.url, {
+      headers: {
+        'user-agent': env.USER_AGENT,
+        accept: src.format === 'pdf' ? 'application/pdf,*/*' : 'text/html,application/xhtml+xml,text/csv,application/json,*/*',
+        'accept-language': 'en-US,en;q=0.9',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(25000),
+      cf: { cacheTtl: 0 },
+    } as RequestInit);
+  } catch (err) {
+    throw new Error(`fetch failed: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+  }
   if (!res.ok) return { status: res.status, body: null };
-  return { status: res.status, body: await res.arrayBuffer() };
+  try {
+    return { status: res.status, body: await res.arrayBuffer() };
+  } catch (err) {
+    throw new Error(`reading body failed: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
+  }
 }
 
 export async function parseSource(src: Source, body: ArrayBuffer): Promise<ParseResult> {
@@ -193,16 +203,17 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
     }
 
     await env.DB.prepare(
-      `UPDATE sources SET last_hash = ?, last_checked = ?, last_status = ?, fail_count = 0,
+      `UPDATE sources SET last_hash = ?, last_checked = ?, last_status = ?, fail_count = 0, last_error = NULL,
          last_changed = CASE WHEN ? THEN ? ELSE last_changed END WHERE id = ?`,
     )
       .bind(parsed.hash, ts, status, changed ? 1 : 0, ts, src.id)
       .run();
     return events;
   } catch (err) {
-    console.error(`check ${src.id} failed:`, err instanceof Error ? err.message : err);
-    await env.DB.prepare('UPDATE sources SET last_checked = ?, last_status = ?, fail_count = fail_count + 1 WHERE id = ?')
-      .bind(ts, status, src.id)
+    const message = (err instanceof Error ? err.message : String(err)).slice(0, 300);
+    console.error(`check ${src.id} failed:`, message);
+    await env.DB.prepare('UPDATE sources SET last_checked = ?, last_status = ?, last_error = ?, fail_count = fail_count + 1 WHERE id = ?')
+      .bind(ts, status, message, src.id)
       .run();
     return 0;
   }

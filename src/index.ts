@@ -217,7 +217,7 @@ export default {
       if (!isAdmin(env, req)) return new Response('not found', { status: 404 });
       if (path === '/admin/sources') {
         const { results } = await env.DB.prepare(
-          'SELECT id, state, name, active, parser, last_checked, last_changed, last_status, fail_count FROM sources ORDER BY state, id',
+          'SELECT id, state, name, active, parser, last_checked, last_changed, last_status, fail_count, last_error FROM sources ORDER BY state, id',
         ).all<Source>();
         return json({ sources: results });
       }

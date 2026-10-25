@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS sources (
   last_checked  TEXT,
   last_changed  TEXT,
   last_status   INTEGER,
-  fail_count    INTEGER NOT NULL DEFAULT 0
+  fail_count    INTEGER NOT NULL DEFAULT 0,
+  last_error    TEXT
 );
 
 -- Individual hunts found on a structured page (table parser).

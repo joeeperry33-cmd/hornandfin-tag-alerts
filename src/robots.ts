@@ -69,14 +69,16 @@ export async function robotsAllows(url: string, userAgent: string): Promise<bool
   let entry = cache.get(key);
   if (!entry || Date.now() - entry.at > 6 * 3600_000) {
     let groups: Group[] = [];
+    let res: Response;
     try {
-      const res = await fetch(`${u.origin}/robots.txt`, { headers: { 'user-agent': userAgent }, signal: AbortSignal.timeout(10000) });
-      // 4xx = no robots file = everything allowed; 5xx = treat as temporarily disallowed.
-      if (res.status >= 500) return false;
-      if (res.ok) groups = parseRobots(await res.text());
-    } catch {
-      return false;
+      res = await fetch(`${u.origin}/robots.txt`, { headers: { 'user-agent': userAgent }, signal: AbortSignal.timeout(10000) });
+    } catch (err) {
+      // Can't read robots.txt: don't fetch the page this round.
+      throw new Error(`robots.txt unreachable: ${err instanceof Error ? err.message : String(err)}`);
     }
+    // 4xx = no robots file = everything allowed; 5xx = treat as temporarily disallowed.
+    if (res.status >= 500) throw new Error(`robots.txt returned HTTP ${res.status}`);
+    if (res.ok) groups = parseRobots(await res.text());
     entry = { groups, at: Date.now() };
     cache.set(key, entry);
   }

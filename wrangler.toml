@@ -34,3 +34,7 @@ USER_AGENT = "LeftoverTagAlerts/0.2 (+https://leftovertagalerts.com/bot)"
 #   STRIPE_PRICE_ID       the monthly price for instant alerts
 #   STRIPE_WEBHOOK_SECRET
 #   ADMIN_TOKEN           protects /admin endpoints
+
+# Keep worker logs in the dashboard (Workers & Pages > leftover-tag-alerts > Logs)
+[observability]
+enabled = true
