@@ -1,3 +1,4 @@
+import { classify, mergeFacets, type TagFacets } from '../tagtype';
 import { decodeEntities, sha256 } from '../util';
 import type { ParsedListing, ParseResult } from '../types';
 
@@ -17,6 +18,10 @@ export interface TableConfig {
   species?: string;
   /** Skip rows whose quantity is 0 (sold out). Default true. */
   skipZero?: boolean;
+  /** Header holding the count available to nonresidents; >0 means nonresidents can buy. */
+  nonresidentColumn?: string;
+  /** Tag type shared by every hunt on this list, used where a row doesn't say. */
+  defaults?: TagFacets;
 }
 
 export type Table = string[][];
@@ -68,6 +73,7 @@ export function listingsFromTable(table: Table, cfg: TableConfig): ParsedListing
   const qtyIdx = cfg.quantityColumn ? colIndex(header, cfg.quantityColumn) : -1;
   const spIdx = cfg.speciesColumn ? colIndex(header, cfg.speciesColumn) : -1;
   const skipZero = cfg.skipZero ?? true;
+  const nrIdx = cfg.nonresidentColumn ? colIndex(header, cfg.nonresidentColumn) : -1;
 
   const out = new Map<string, ParsedListing>();
   for (const row of rows) {
@@ -77,7 +83,14 @@ export function listingsFromTable(table: Table, cfg: TableConfig): ParsedListing
     if (skipZero && quantity !== null && quantity <= 0) continue;
     const label = labelIdx.map((i) => row[i]).filter(Boolean).join(' – ');
     const species = spIdx >= 0 ? (row[spIdx] ?? '').toLowerCase() : cfg.species;
-    out.set(key, { key, label: label || key, species, quantity });
+    // Tag type: read from the whole row (hunt name, weapon, season columns), then fall back to the list's defaults.
+    const found = classify(row.join(' '));
+    if (nrIdx >= 0) {
+      const nr = parseQuantity(row[nrIdx] ?? '');
+      if (nr !== null) found.residency = nr > 0 ? 'both' : 'resident';
+    }
+    const facets = mergeFacets(found, cfg.defaults);
+    out.set(key, { key, label: label || key, species, quantity, weapon: facets.weapon ?? null, sex: facets.sex ?? null, residency: facets.residency ?? null });
   }
   return [...out.values()];
 }

@@ -1,3 +1,4 @@
+import { OPENING_LABEL, type Opening } from './tagtype';
 import type { Env } from './types';
 import { escapeHtml, isIntro, SPECIES, STATES, textsEnabled } from './util';
 
@@ -96,7 +97,7 @@ export interface HomeData {
   watched: { state: string; name: string }[];
   unwatchedStates: string[];
   lastChecked: string | null;
-  recent: { state: string; title: string; link_url: string; created_at: string }[];
+  recent: { state: string; title: string; link_url: string; created_at: string; opening: string | null }[];
 }
 
 export async function loadHomeData(env: Env): Promise<HomeData> {
@@ -105,7 +106,7 @@ export async function loadHomeData(env: Env): Promise<HomeData> {
     env.DB.prepare('SELECT state, name FROM sources WHERE active = 1 ORDER BY state, name').all<{ state: string; name: string }>(),
     env.DB.prepare('SELECT DISTINCT state FROM sources WHERE active = 0 AND state NOT IN (SELECT state FROM sources WHERE active = 1)').all<{ state: string }>(),
     env.DB.prepare('SELECT MAX(last_checked) AS t FROM sources WHERE active = 1').first<{ t: string | null }>(),
-    env.DB.prepare('SELECT state, title, link_url, created_at FROM events WHERE created_at <= ? ORDER BY created_at DESC LIMIT 6').bind(delay).all<HomeData['recent'][number]>(),
+    env.DB.prepare('SELECT state, title, link_url, created_at, opening FROM events WHERE created_at <= ? ORDER BY created_at DESC LIMIT 6').bind(delay).all<HomeData['recent'][number]>(),
   ]);
   return { watched: watched.results, unwatchedStates: inactive.results.map((r) => r.state), lastChecked: last?.t ?? null, recent: recent.results };
 }
@@ -219,12 +220,12 @@ function heroTag(data: HomeData): string {
   if (real) {
     return `<div class="tag-hang"><div class="string" aria-hidden="true"></div><div class="tag" role="img" aria-label="Most recent opening: ${escapeHtml(real.title)}">
 <div class="issuer">${escapeHtml((STATES[real.state] ?? real.state).toUpperCase())} BIG GAME</div>
-<dl><dt>OPENING</dt><dd>${escapeHtml(real.title.replace(/^[^:]+:\s*/, ''))}</dd><dt>POSTED</dt><dd>${escapeHtml(timeAgo(real.created_at))}</dd></dl>
+<dl><dt>OPENING</dt><dd>${escapeHtml(real.title.replace(/^[^:]+:\s*/, ''))}</dd>${real.opening && OPENING_LABEL[real.opening as Opening] ? `<dt>TYPE</dt><dd>${OPENING_LABEL[real.opening as Opening]}</dd>` : ''}<dt>POSTED</dt><dd>${escapeHtml(timeAgo(real.created_at))}</dd></dl>
 <div class="stamp">JUST OPENED</div></div></div><p class="tag-note">Our most recent public alert. Subscribers got it 12 hours earlier.</p>`;
   }
   return `<div class="tag-hang"><div class="string" aria-hidden="true"></div><div class="tag" role="img" aria-label="Example alert: 3 elk tags open in Utah hunt EB3010">
 <div class="issuer">UTAH BIG GAME</div>
-<dl><dt>HUNT</dt><dd>EB3010 Book Cliffs</dd><dt>SPECIES</dt><dd>Bull elk, muzzleloader</dd><dt>LEFT</dt><dd><span class="big">3</span></dd></dl>
+<dl><dt>HUNT</dt><dd>EB3010 Book Cliffs</dd><dt>SPECIES</dt><dd>Elk</dd><dt>TYPE</dt><dd>Leftover, muzzleloader, antlered</dd><dt>LEFT</dt><dd><span class="big">3</span></dd></dl>
 <div class="stamp">JUST OPENED</div></div></div><p class="tag-note">An example of what an alert tells you.</p>`;
 }
 
@@ -320,7 +321,8 @@ ${recent}
 <details><summary>Can nonresidents buy them?</summary><p>Usually. Some states hold leftovers for residents first, such as New Mexico for the first 24 hours. The state's own page has the final word.</p></details>
 <details><summary>Do you sell tags?</summary><p>No. Tags are sold only by each state's wildlife agency. We tell you when they open up and link you to the state's license site.</p></details>
 <details><summary>How fast are instant alerts?</summary><p>We check each state list as often as every 15 minutes during its season and send instant alerts right after a change is found. Some states only update their lists once a day or once a week, so an alert can't come sooner than the state posts.</p></details>
-<details><summary>How do I change or stop alerts?</summary><p>Every email has links to change your states and species or unsubscribe. Reply STOP to any text to end texts.</p></details>
+<details><summary>Can I get only certain kinds of tags?</summary><p>Yes. Every alert shows each hunt's tag type: leftover, returned or reissued, the weapon, antlered or antlerless, and whether nonresidents can buy it. In your settings you can choose which of those you want and set your home state to skip tags you can't buy. When a state doesn't say, you still get the alert.</p></details>
+<details><summary>How do I change or stop alerts?</summary><p>Every email has links to change your states, species and tag types, or unsubscribe. Reply STOP to any text to end texts.</p></details>
 ${isIntro(env) ? '<details><summary>Is it really free?</summary><p>Yes. During launch every alert is free, with no card required. If we add paid plans later, current subscribers hear about it first, and nothing changes for you unless you choose to.</p></details>' : ''}
 </div></section>
 

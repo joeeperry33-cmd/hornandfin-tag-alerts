@@ -1,6 +1,7 @@
 import { parseChange, type ChangeConfig } from './parsers/change';
 import { parseTable, type TableConfig } from './parsers/table';
 import { robotsAllows } from './robots';
+import { mergeFacets, type Opening, type TagFacets } from './tagtype';
 import type { Env, ParsedListing, ParseResult, Source } from './types';
 import { inSeason, nowIso, STATES } from './util';
 
@@ -98,6 +99,19 @@ function describe(l: ParsedListing): string {
   return l.quantity !== null ? `${l.label} (${l.quantity} available)` : l.label;
 }
 
+function sourceDefaults(src: Source): TagFacets {
+  try {
+    const cfg = src.parser_config ? JSON.parse(src.parser_config) : {};
+    return mergeFacets({}, cfg.defaults);
+  } catch {
+    return {};
+  }
+}
+
+function sourceOpening(src: Source): Opening {
+  return src.opening === 'returned' || src.opening === 'reissue' ? src.opening : 'leftover';
+}
+
 async function insertEvent(
   env: Env,
   src: Source,
@@ -105,13 +119,25 @@ async function insertEvent(
   title: string,
   detail: string | null,
   species: string | null,
-): Promise<void> {
-  await env.DB.prepare(
-    `INSERT INTO events (source_id, kind, state, species, title, detail, link_url, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  opening: Opening,
+  facets: TagFacets,
+): Promise<number> {
+  const row = await env.DB.prepare(
+    `INSERT INTO events (source_id, kind, state, species, title, detail, link_url, created_at, opening, weapon, sex, residency)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(src.id, kind, src.state, species, title, detail, src.link_url || src.url, nowIso())
-    .run();
+    .bind(src.id, kind, src.state, species, title, detail, src.link_url || src.url, nowIso(), opening, facets.weapon ?? null, facets.sex ?? null, facets.residency ?? null)
+    .first<{ id: number }>();
+  return row!.id;
+}
+
+async function insertItems(env: Env, eventId: number, items: { listing: ParsedListing; from: number | null }[]): Promise<void> {
+  const stmts = items.map(({ listing: l, from }) =>
+    env.DB.prepare(
+      'INSERT INTO event_items (event_id, label, species, quantity, prev_quantity, weapon, sex, residency) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(eventId, l.label, normalizeSpecies(l.species), l.quantity, from, l.weapon ?? null, l.sex ?? null, l.residency ?? null),
+  );
+  for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
 }
 
 async function applyListings(env: Env, src: Source, current: ParsedListing[], baseline: boolean): Promise<number> {
@@ -126,11 +152,12 @@ async function applyListings(env: Env, src: Source, current: ParsedListing[], ba
   for (const l of current) {
     stmts.push(
       env.DB.prepare(
-        `INSERT INTO listings (id, source_id, hunt_key, label, species, quantity, first_seen, last_seen, gone_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        `INSERT INTO listings (id, source_id, hunt_key, label, species, quantity, first_seen, last_seen, gone_at, weapon, sex, residency)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET label = excluded.label, species = excluded.species,
-           quantity = excluded.quantity, last_seen = excluded.last_seen, gone_at = NULL`,
-      ).bind(`${src.id}:${l.key}`, src.id, l.key, l.label, l.species ?? null, l.quantity, ts, ts),
+           quantity = excluded.quantity, last_seen = excluded.last_seen, gone_at = NULL,
+           weapon = excluded.weapon, sex = excluded.sex, residency = excluded.residency`,
+      ).bind(`${src.id}:${l.key}`, src.id, l.key, l.label, l.species ?? null, l.quantity, ts, ts, l.weapon ?? null, l.sex ?? null, l.residency ?? null),
     );
   }
   for (const key of diff.goneKeys) {
@@ -142,30 +169,39 @@ async function applyListings(env: Env, src: Source, current: ParsedListing[], ba
   if (baseline || results.length === 0) return 0;
 
   const stateName = STATES[src.state] ?? src.state;
+  const opening = sourceOpening(src);
+  const defaults = sourceDefaults(src);
   let events = 0;
-  // One event per species, so an elk-only subscriber never gets a deer hunt in their alert.
-  for (const [species, added] of groupBySpecies(diff.added, (l) => l)) {
-    const shown = added.slice(0, MAX_LISTINGS_PER_EVENT).map(describe);
-    const more = added.length - shown.length;
-    const noun = species ? `${species} hunts` : 'hunts';
+  // One alert per change. Each hunt is stored as an item with its own species and tag type, and
+  // every subscriber's email lists only the hunts that match their settings.
+  if (diff.added.length) {
     const title =
-      added.length === 1
-        ? `${stateName}: ${describe(added[0])} just opened up`
-        : `${stateName}: ${added.length} ${noun} just opened up on the ${src.name}`;
-    await insertEvent(env, src, 'new_listing', title, shown.join('\n') + (more > 0 ? `\n…and ${more} more` : ''), species ?? src.species);
+      diff.added.length === 1
+        ? `${stateName}: ${describe(diff.added[0])} just opened up`
+        : `${stateName}: ${diff.added.length} hunts just opened up on the ${src.name}`;
+    const shown = diff.added.slice(0, MAX_LISTINGS_PER_EVENT).map(describe);
+    const more = diff.added.length - shown.length;
+    const id = await insertEvent(env, src, 'new_listing', title, shown.join('\n') + (more > 0 ? `\n…and ${more} more` : ''), speciesOf(diff.added, src), opening, defaults);
+    await insertItems(env, id, diff.added.map((listing) => ({ listing, from: null })));
     events++;
   }
-  for (const [species, increased] of groupBySpecies(diff.increased, (d) => d.listing)) {
-    const lines = increased.slice(0, MAX_LISTINGS_PER_EVENT).map(({ listing, from }) => `${listing.label}: ${from ?? 0} → ${listing.quantity}`);
-    const noun = species ? `${species} hunts` : 'hunts';
+  if (diff.increased.length) {
     const title =
-      increased.length === 1
-        ? `${stateName}: more tags returned for ${increased[0].listing.label}`
-        : `${stateName}: tags returned in ${increased.length} ${noun} on the ${src.name}`;
-    await insertEvent(env, src, 'quantity_up', title, lines.join('\n'), species ?? src.species);
+      diff.increased.length === 1
+        ? `${stateName}: more tags returned for ${diff.increased[0].listing.label}`
+        : `${stateName}: tags returned in ${diff.increased.length} hunts on the ${src.name}`;
+    const lines = diff.increased.slice(0, MAX_LISTINGS_PER_EVENT).map(({ listing, from }) => `${listing.label}: ${from ?? 0} → ${listing.quantity}`);
+    // A count going back up on a leftover list means hunters returned tags.
+    const id = await insertEvent(env, src, 'quantity_up', title, lines.join('\n'), speciesOf(diff.increased.map((d) => d.listing), src), 'returned', defaults);
+    await insertItems(env, id, diff.increased);
     events++;
   }
   return events;
+}
+
+function speciesOf(listings: ParsedListing[], src: Source): string | null {
+  const set = new Set(listings.map((l) => normalizeSpecies(l.species)).filter(Boolean) as string[]);
+  return set.size ? [...set].join(',') : src.species;
 }
 
 const KNOWN_SPECIES: Record<string, string> = {
@@ -183,14 +219,6 @@ export function normalizeSpecies(raw: string | undefined): string | null {
   return 'other';
 }
 
-function groupBySpecies<T>(items: T[], listing: (t: T) => ParsedListing): Map<string | null, T[]> {
-  const groups = new Map<string | null, T[]>();
-  for (const it of items) {
-    const key = normalizeSpecies(listing(it).species);
-    groups.set(key, [...(groups.get(key) ?? []), it]);
-  }
-  return groups;
-}
 
 /** Check one source; returns how many alert events it created. */
 export async function checkSource(env: Env, src: Source): Promise<number> {
@@ -209,7 +237,7 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
       if (baseline || changed) events = await applyListings(env, src, parsed.listings, baseline);
     } else if (changed) {
       const stateName = STATES[src.state] ?? src.state;
-      await insertEvent(env, src, 'page_changed', `${stateName}: the ${src.name} was just updated`, src.notes, src.species);
+      await insertEvent(env, src, 'page_changed', `${stateName}: the ${src.name} was just updated`, src.notes, src.species, sourceOpening(src), sourceDefaults(src));
       events = 1;
     }
 

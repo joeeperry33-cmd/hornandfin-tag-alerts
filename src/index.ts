@@ -1,4 +1,5 @@
 import { runChecks } from './check';
+import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
 import { loginPage, managePage, messagePage } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
@@ -159,6 +160,15 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
   if (!sub) return json({ error: 'This link has expired.' }, 401);
   const states = parseList(b.states, STATE_CODES, true);
   const species = parseList(b.species, SPECIES, false);
+  const allOrList = (v: unknown, allowed: readonly string[]) => {
+    const list = parseList(v, [...allowed], false);
+    return list.split(',').length === allowed.length ? '*' : list;
+  };
+  const openings = allOrList(b.openings, OPENINGS);
+  const weapons = allOrList(b.weapons, WEAPON_CHOICES);
+  const sexes = allOrList(b.sexes, SEX_CHOICES);
+  const home = String(b.home_state ?? '').trim().toUpperCase();
+  const homeState = STATE_CODES.includes(home) ? home : null;
   let phone = sub.phone;
   let consentAt = sub.sms_consent_at;
   let stopped = sub.sms_stopped;
@@ -172,8 +182,8 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
       if (!consentAt || phone !== sub.phone || stopped) { consentAt = nowIso(); stopped = 0; }
     }
   }
-  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
-    .bind(states, species, phone, consentAt, stopped, sub.id)
+  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, openings = ?, weapons = ?, sexes = ?, home_state = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
+    .bind(states, species, openings, weapons, sexes, homeState, phone, consentAt, stopped, sub.id)
     .run();
   return json({ ok: true });
 }

@@ -3,7 +3,8 @@ import { diffListings, isDue, normalizeSpecies } from '../src/check';
 import { meaningfulText, parseChange, stablePdfBytes } from '../src/parsers/change';
 import { extractTables, listingsFromTable, parseCsv, parseTable } from '../src/parsers/table';
 import { isAllowed, parseRobots } from '../src/robots';
-import { smsBody, wants } from '../src/notify';
+import { personalize, smsBody } from '../src/notify';
+import type { EventItem } from '../src/types';
 import { verifyStripeSignature } from '../src/stripe';
 import type { AlertEvent, Source, Subscriber } from '../src/types';
 import { inSeason, matchesList, normalizeEmail, normalizeUsPhone, parseList, STATES } from '../src/util';
@@ -31,8 +32,8 @@ describe('table parser', () => {
   it('builds listings, parses quantities, skips sold out', () => {
     const listings = listingsFromTable(extractTables(UTAH_LIKE)[0], cfg);
     expect(listings).toEqual([
-      { key: 'EB1005', label: "EB1005 – Hunter's choice bull elk", species: 'elk', quantity: 1204 },
-      { key: 'EB3010', label: 'EB3010 – Book Cliffs & Bitter Creek', species: 'elk', quantity: 3 },
+      { key: 'EB1005', label: "EB1005 – Hunter's choice bull elk", species: 'elk', quantity: 1204, weapon: 'archery', sex: 'antlered', residency: null },
+      { key: 'EB3010', label: 'EB3010 – Book Cliffs & Bitter Creek', species: 'elk', quantity: 3, weapon: 'muzzleloader', sex: 'antlered', residency: null },
     ]);
   });
 
@@ -158,7 +159,8 @@ describe('robots.txt', () => {
 
 describe('subscriber matching and messages', () => {
   const sub = { states: 'CO,UT', species: 'elk' } as Subscriber;
-  const ev = (state: string, species: string | null) => ({ state, species }) as AlertEvent;
+  const ev = (state: string, species: string | null) => ({ state, species, title: 't', detail: null, kind: 'page_changed' }) as AlertEvent;
+  const wants = (s: Subscriber, e: AlertEvent) => personalize(s, e, []) !== null;
   it('matches by state and species; unknown species goes to state followers', () => {
     expect(wants(sub, ev('CO', 'elk,deer'))).toBe(true);
     expect(wants(sub, ev('CO', 'deer'))).toBe(false);
@@ -166,8 +168,25 @@ describe('subscriber matching and messages', () => {
     expect(wants(sub, ev('UT', null))).toBe(true);
     expect(matchesList('*', 'anything')).toBe(true);
   });
+  it('lists only the hunts that match, with their tag type', () => {
+    const e = { state: 'UT', species: 'elk,deer', kind: 'new_listing', title: 'Utah: 3 hunts just opened up on the list', opening: 'leftover' } as AlertEvent;
+    const it_ = (label: string, species: string, weapon: string | null, sex: string | null, residency: string | null = null) =>
+      ({ event_id: 1, label, species, quantity: 4, prev_quantity: null, weapon, sex, residency }) as EventItem;
+    const items = [it_('EB1001 Bull elk ML', 'elk', 'muzzleloader', 'antlered'), it_('EA2002 Cow elk archery', 'elk', 'archery', 'antlerless'), it_('DB3003 Buck deer', 'deer', 'rifle', 'antlered', 'resident')];
+    const s2 = { states: '*', species: 'elk', openings: '*', weapons: 'muzzleloader,rifle', sexes: '*', home_state: null } as Subscriber;
+    const p = personalize(s2, e, items)!;
+    expect(p.lines.map((l) => l.text)).toEqual(['EB1001 Bull elk ML (4 available)']);
+    expect(p.lines[0].tags).toEqual(['Leftover', 'Muzzleloader', 'Antlered']);
+    expect(p.title).toBe('Utah: EB1001 Bull elk ML (4 available) just opened up');
+    // resident-only deer tag is hidden from a Colorado resident, shown to a Utah resident
+    const deer = { ...s2, species: 'deer', weapons: '*' } as Subscriber;
+    expect(personalize({ ...deer, home_state: 'CO' } as Subscriber, e, items)).toBeNull();
+    expect(personalize({ ...deer, home_state: 'UT' } as Subscriber, e, items)!.lines).toHaveLength(1);
+    // opening filter
+    expect(personalize({ ...s2, openings: 'returned' } as Subscriber, e, items)).toBeNull();
+  });
   it('keeps texts short and always includes STOP', () => {
-    const body = smsBody({ title: 'x'.repeat(500), link_url: 'https://cpw.state.co.us/x' } as AlertEvent);
+    const body = smsBody({ link_url: 'https://cpw.state.co.us/x' } as AlertEvent, { title: 'x'.repeat(500), lines: [], tags: ['Leftover'] });
     expect(body.length).toBeLessThanOrEqual(300);
     expect(body).toMatch(/Reply STOP to end\.$/);
   });
@@ -225,5 +244,41 @@ describe('sign-in cookie', () => {
     const req = new Request('https://leftovertagalerts.com/manage', { headers: { cookie: 'a=1; lta_session=abc%3D%3D; b=2' } });
     expect(readCookie(req, 'lta_session')).toBe('abc==');
     expect(readCookie(req, 'missing')).toBeNull();
+  });
+});
+
+describe('tag types', () => {
+  it('reads weapon, sex and residency from hunt text', async () => {
+    const { classify } = await import('../src/tagtype');
+    expect(classify('Antlerless deer - archery')).toEqual({ weapon: 'archery', sex: 'antlerless' });
+    expect(classify('Bull elk, muzzleloader')).toEqual({ weapon: 'muzzleloader', sex: 'antlered' });
+    expect(classify('Any legal weapon either-sex elk')).toEqual({ weapon: 'any', sex: 'either' });
+    expect(classify('Nonresident whitetail rifle buck')).toEqual({ weapon: 'rifle', sex: 'antlered', residency: 'nonresident' });
+    expect(classify('DA1234 Cache')).toEqual({ sex: 'antlerless' });
+    expect(classify('Unit 12 general')).toEqual({});
+  });
+  it('row values beat list defaults; defaults fill gaps', async () => {
+    const { mergeFacets } = await import('../src/tagtype');
+    expect(mergeFacets({ sex: 'antlered' }, { sex: 'antlerless', residency: 'nonresident' })).toEqual({ weapon: null, sex: 'antlered', residency: 'nonresident' });
+  });
+  it('filters by opening, weapon, sex and home state; unknowns always pass', async () => {
+    const { tagWanted } = await import('../src/tagtype');
+    const f = { openings: 'leftover,returned', weapons: 'archery', sexes: 'antlered', home_state: 'CA' };
+    expect(tagWanted(f, 'CO', 'leftover', { weapon: 'archery', sex: 'antlered' })).toBe(true);
+    expect(tagWanted(f, 'CO', 'reissue', { weapon: 'archery' })).toBe(false); // opening not picked
+    expect(tagWanted(f, 'CO', 'leftover', { weapon: 'rifle' })).toBe(false);
+    expect(tagWanted(f, 'CO', 'leftover', { weapon: 'any' })).toBe(true); // any-weapon tags fit every weapon
+    expect(tagWanted(f, 'CO', 'leftover', { sex: 'antlerless' })).toBe(false);
+    expect(tagWanted(f, 'CO', 'leftover', { sex: 'either' })).toBe(true);
+    expect(tagWanted(f, 'CO', 'leftover', { residency: 'resident' })).toBe(false); // CO resident-only, lives in CA
+    expect(tagWanted(f, 'CA', 'leftover', { residency: 'resident' })).toBe(true);
+    expect(tagWanted(f, 'CA', 'leftover', { residency: 'nonresident' })).toBe(false); // NR tag in home state
+    expect(tagWanted(f, 'CO', 'leftover', {})).toBe(true);
+    expect(tagWanted({ openings: '*', weapons: '*', sexes: '*', home_state: null }, 'UT', 'reissue', { weapon: 'rifle', sex: 'antlerless', residency: 'resident' })).toBe(true);
+  });
+  it('labels an alert line', async () => {
+    const { facetLabels } = await import('../src/tagtype');
+    expect(facetLabels('leftover', { weapon: 'muzzleloader', sex: 'antlered', residency: 'both' })).toEqual(['Leftover', 'Muzzleloader', 'Antlered', 'Residents and nonresidents']);
+    expect(facetLabels(null, {})).toEqual([]);
   });
 });

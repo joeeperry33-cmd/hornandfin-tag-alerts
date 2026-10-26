@@ -43,6 +43,7 @@ export interface Source {
   last_status: number | null;
   fail_count: number;
   last_error?: string | null;
+  opening?: string | null;
 }
 
 export interface Subscriber {
@@ -61,6 +62,10 @@ export interface Subscriber {
   sms_stopped: number;
   unsubscribed_at: string | null;
   created_at: string;
+  openings?: string;
+  weapons?: string;
+  sexes?: string;
+  home_state?: string | null;
 }
 
 export interface AlertEvent {
@@ -73,6 +78,22 @@ export interface AlertEvent {
   detail: string | null;
   link_url: string;
   created_at: string;
+  opening?: string | null;
+  weapon?: string | null;
+  sex?: string | null;
+  residency?: string | null;
+}
+
+/** One hunt inside an alert (table sources). */
+export interface EventItem {
+  event_id: number;
+  label: string;
+  species: string | null;
+  quantity: number | null;
+  prev_quantity: number | null;
+  weapon: string | null;
+  sex: string | null;
+  residency: string | null;
 }
 
 /** A hunt row pulled out of a structured state page. */
@@ -81,6 +102,9 @@ export interface ParsedListing {
   label: string;
   species?: string;
   quantity: number | null;
+  weapon?: string | null;
+  sex?: string | null;
+  residency?: string | null;
 }
 
 /** What a parser returns for one fetch of a source. */

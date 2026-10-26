@@ -10,6 +10,8 @@ const APP_CSS = `
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:4px 14px}
 label.chk{display:flex;gap:8px;align-items:center;font-size:16px;padding:2px 0}
 label.chk input{accent-color:var(--blaze);width:17px;height:17px}
+select{padding:11px;border:1.5px solid var(--line);border-radius:3px;font:17px var(--body);background:#fff;color:var(--ink);max-width:100%}
+.sub{font-size:15px;font-weight:700;margin:16px 0 6px}
 input[type=tel]{width:100%;max-width:320px;padding:12px;border:1.5px solid var(--line);border-radius:3px;font:17px var(--body);background:#fff;color:var(--ink)}
 .consent{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:14px;color:var(--moss)}
 .consent input{margin-top:3px;accent-color:var(--blaze);width:17px;height:17px;flex:none}
@@ -71,6 +73,17 @@ ${phoneFields}
 <form id="prefs" novalidate>
 ${plan}
 <div class="panel"><h2>Species</h2><div class="grid">${checkboxes('species', species, sub.species)}</div></div>
+<div class="panel"><h2>Tag types</h2>
+<p class="muted">Every alert shows each hunt's tag type. Narrow what you get here. When a state doesn't say, you still get the alert.</p>
+<div class="sub">How it opened up</div><div class="grid">${checkboxes('openings', [['leftover', 'Leftover'], ['returned', 'Returned'], ['reissue', 'Reissued']], sub.openings || '*')}</div>
+<div class="sub">Weapon</div><div class="grid">${checkboxes('weapons', [['archery', 'Archery'], ['muzzleloader', 'Muzzleloader'], ['rifle', 'Rifle']], sub.weapons || '*')}</div>
+<p class="muted" style="font-size:14px;margin-top:4px">Any-weapon tags are always included.</p>
+<div class="sub">Antlered or antlerless</div><div class="grid">${checkboxes('sexes', [['antlered', 'Antlered'], ['antlerless', 'Antlerless']], sub.sexes || '*')}</div>
+<div class="sub"><label for="home_state">Your home state</label></div>
+<select id="home_state" name="home_state"><option value="">Don't filter by residency</option>${states
+    .map(([code, name]) => `<option value="${code}"${sub.home_state === code ? ' selected' : ''}>${escapeHtml(name)}</option>`)
+    .join('')}</select>
+<p class="muted" style="font-size:14px;margin-top:6px">Set this to skip resident-only tags in other states and nonresident-only tags in yours.</p></div>
 <div class="panel"><h2>States</h2>
 <div class="row" style="margin-bottom:10px"><button type="button" class="linkbtn" data-all="1">Select all</button><button type="button" class="linkbtn" data-all="0">Clear</button></div>
 <div class="grid">${checkboxes('states', states, sub.states)}</div></div>
@@ -85,8 +98,9 @@ async function post(path,body){const r=await fetch(path,{method:'POST',headers:{
 form.onsubmit=async e=>{e.preventDefault();errBox.textContent='';
  const vals=n=>[...form.querySelectorAll('input[name='+n+']:checked')].map(c=>c.value);
  if(!vals('states').length||!vals('species').length){errBox.textContent='Pick at least one state and one species.';return;}
+ if(!vals('openings').length||!vals('weapons').length||!vals('sexes').length){errBox.textContent='Pick at least one option under each tag type.';return;}
  const phone=form.querySelector('[name=phone]');const consent=form.querySelector('[name=sms_consent]');
- try{await post('/api/manage',{states:vals('states'),species:vals('species'),phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
+ try{await post('/api/manage',{states:vals('states'),species:vals('species'),openings:vals('openings'),weapons:vals('weapons'),sexes:vals('sexes'),home_state:form.querySelector('[name=home_state]').value,phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
 const up=document.getElementById('upgrade');if(up)up.onclick=async()=>{try{const d=await post('/api/checkout',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
 const bill=document.getElementById('billing');if(bill)bill.onclick=async()=>{try{const d=await post('/api/billing',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
 </script>`;

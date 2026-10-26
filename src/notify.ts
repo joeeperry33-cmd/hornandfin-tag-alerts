@@ -1,4 +1,5 @@
-import type { AlertEvent, Env, Subscriber } from './types';
+import type { AlertEvent, Env, EventItem, Subscriber } from './types';
+import { facetLabels, tagWanted, type Opening, type TagFacets } from './tagtype';
 import { escapeHtml, isIntro, matchesList, nowIso, STATES } from './util';
 
 const INSTANT_WINDOW_HOURS = 6; // never send an "instant" alert about something older than this
@@ -80,21 +81,90 @@ ${escapeHtml(env.SITE_NAME)}, operated by ${escapeHtml(env.BUSINESS_NAME)}<br>${
 </td></tr></table></td></tr></table></body></html>`;
 }
 
-function eventBlock(e: AlertEvent): string {
-  const detail = e.detail
-    ? `<div style="margin:8px 0 12px;font-size:14px;line-height:1.5;color:#33433a">${escapeHtml(e.detail).replace(/\n/g, '<br>')}</div>`
+/** An alert as one subscriber sees it: only the hunts that match their settings, each with its tag type. */
+export interface Personal {
+  title: string;
+  lines: { text: string; tags: string[] }[];
+  tags: string[]; // tag type for alerts with no hunt list (a page that changed)
+}
+
+const MAX_LINES = 25;
+
+function filterOf(sub: Subscriber) {
+  return { openings: sub.openings || '*', weapons: sub.weapons || '*', sexes: sub.sexes || '*', home_state: sub.home_state || null };
+}
+
+function facetsOf(x: { weapon?: string | null; sex?: string | null; residency?: string | null }): TagFacets {
+  return { weapon: (x.weapon as TagFacets['weapon']) ?? null, sex: (x.sex as TagFacets['sex']) ?? null, residency: (x.residency as TagFacets['residency']) ?? null };
+}
+
+function itemText(it: EventItem): string {
+  if (it.prev_quantity != null && it.quantity != null) return `${it.label}: ${it.prev_quantity} → ${it.quantity}`;
+  return it.quantity != null ? `${it.label} (${it.quantity} available)` : it.label;
+}
+
+/** Null when nothing in this alert matches the subscriber. */
+export function personalize(sub: Subscriber, e: AlertEvent, items: EventItem[]): Personal | null {
+  if (!matchesList(sub.states, e.state)) return null;
+  const f = filterOf(sub);
+  const opening = (e.opening as Opening) ?? null;
+  if (!items.length) {
+    if (!matchesList(sub.species, e.species)) return null;
+    const facets = facetsOf(e);
+    if (!tagWanted(f, e.state, opening, facets)) return null;
+    return { title: e.title, lines: e.detail ? e.detail.split('\n').map((text) => ({ text, tags: [] })) : [], tags: facetLabels(opening, facets) };
+  }
+  const mine = items.filter((it) => matchesList(sub.species, it.species) && tagWanted(f, e.state, opening, facetsOf(it)));
+  if (!mine.length) return null;
+  const stateName = STATES[e.state] ?? e.state;
+  let title = e.title;
+  if (mine.length !== items.length) {
+    if (mine.length === 1) title = e.kind === 'quantity_up' ? `${stateName}: more tags returned for ${mine[0].label}` : `${stateName}: ${itemText(mine[0])} just opened up`;
+    else title = e.kind === 'quantity_up' ? `${stateName}: tags returned in ${mine.length} of your hunts` : `${stateName}: ${mine.length} hunts you follow just opened up`;
+  }
+  const lines = mine.slice(0, MAX_LINES).map((it) => ({ text: itemText(it), tags: facetLabels(opening, facetsOf(it)) }));
+  if (mine.length > MAX_LINES) lines.push({ text: `…and ${mine.length - MAX_LINES} more`, tags: [] });
+  return { title, lines, tags: [] };
+}
+
+function tagChips(tags: string[]): string {
+  return tags
+    .map((t) => `<span style="display:inline-block;background:#e4e9e1;color:#1f3d35;border-radius:3px;padding:1px 6px;margin:2px 4px 0 0;font-size:12px;font-weight:bold">${escapeHtml(t)}</span>`)
+    .join('');
+}
+
+function eventBlock(e: AlertEvent, p: Personal): string {
+  const lines = p.lines.length
+    ? `<div style="margin:8px 0 12px;font-size:14px;line-height:1.5;color:#33433a">${p.lines
+        .map((l) => `<div style="margin:0 0 6px">${escapeHtml(l.text)}${l.tags.length ? `<br>${tagChips(l.tags)}` : ''}</div>`)
+        .join('')}</div>`
     : '';
+  const head = p.tags.length ? `<div style="margin:6px 0 0">${tagChips(p.tags)}</div>` : '';
   return `<div style="border-left:4px solid #ff6a13;padding:4px 0 4px 12px;margin:0 0 20px">
-<div style="font-size:16px;font-weight:bold">${escapeHtml(e.title)}</div>${detail}
+<div style="font-size:16px;font-weight:bold">${escapeHtml(p.title)}</div>${head}${lines}
 <a href="${escapeHtml(e.link_url)}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:9px 14px;border-radius:3px;font-size:14px;font-weight:bold">Go to the ${escapeHtml(STATES[e.state] ?? e.state)} site</a></div>`;
 }
 
-function eventText(e: AlertEvent): string {
-  return `${e.title}\n${e.detail ? e.detail + '\n' : ''}${e.link_url}\n`;
+function eventText(e: AlertEvent, p: Personal): string {
+  const tags = p.tags.length ? `[${p.tags.join(', ')}]\n` : '';
+  const lines = p.lines.map((l) => (l.tags.length ? `- ${l.text} [${l.tags.join(', ')}]` : `- ${l.text}`)).join('\n');
+  return `${p.title}\n${tags}${lines ? lines + '\n' : ''}${e.link_url}\n`;
 }
 
-export function wants(sub: Subscriber, e: AlertEvent): boolean {
-  return matchesList(sub.states, e.state) && matchesList(sub.species, e.species);
+async function itemsFor(env: Env, eventIds: number[]): Promise<Map<number, EventItem[]>> {
+  const map = new Map<number, EventItem[]>();
+  for (let i = 0; i < eventIds.length; i += 90) {
+    const ids = eventIds.slice(i, i + 90);
+    const { results } = await env.DB.prepare(`SELECT * FROM event_items WHERE event_id IN (${ids.map(() => '?').join(',')})`)
+      .bind(...ids)
+      .all<EventItem>();
+    for (const r of results) {
+      const list = map.get(r.event_id) ?? [];
+      list.push(r);
+      map.set(r.event_id, list);
+    }
+  }
+  return map;
 }
 
 async function deliveredSet(env: Env, eventIds: number[], channel: string): Promise<Set<string>> {
@@ -137,6 +207,7 @@ export async function sendInstantAlerts(env: Env): Promise<{ emails: number; sms
     .bind(isIntro(env) ? 1 : 0)
     .all<Subscriber>();
   const ids = events.map((e) => e.id);
+  const items = await itemsFor(env, ids);
   const emailed = await deliveredSet(env, ids, 'email');
   const texted = await deliveredSet(env, ids, 'sms');
 
@@ -144,22 +215,23 @@ export async function sendInstantAlerts(env: Env): Promise<{ emails: number; sms
   const texts: { to: string; body: string; eventId: number; subId: string }[] = [];
   for (const e of events) {
     for (const s of subs) {
-      if (!wants(s, e)) continue;
+      const p = personalize(s, e, items.get(e.id) ?? []);
+      if (!p) continue;
       if (!emailed.has(`${e.id}:${s.id}`) && emails.length < MAX_EMAILS_PER_RUN) {
         emails.push({
           eventId: e.id,
           subId: s.id,
           msg: {
             to: s.email,
-            subject: e.title,
-            html: layout(env, s, eventBlock(e)),
-            text: `${eventText(e)}\nManage alerts: ${manageUrl(env, s)}\nUnsubscribe: ${unsubscribeUrl(env, s)}`,
+            subject: p.title,
+            html: layout(env, s, eventBlock(e, p)),
+            text: `${eventText(e, p)}\nManage alerts: ${manageUrl(env, s)}\nUnsubscribe: ${unsubscribeUrl(env, s)}`,
             headers: listHeaders(env, s),
           },
         });
       }
       if (s.phone && s.sms_consent_at && !s.sms_stopped && !texted.has(`${e.id}:${s.id}`) && texts.length < MAX_SMS_PER_RUN) {
-        texts.push({ to: s.phone, body: smsBody(e), eventId: e.id, subId: s.id });
+        texts.push({ to: s.phone, body: smsBody(e, p), eventId: e.id, subId: s.id });
       }
     }
   }
@@ -173,8 +245,9 @@ export async function sendInstantAlerts(env: Env): Promise<{ emails: number; sms
   return { emails: sent.filter(Boolean).length, sms: smsDone.length };
 }
 
-export function smsBody(e: AlertEvent): string {
-  const head = `Leftover Tag Alerts: ${e.title}`;
+export function smsBody(e: AlertEvent, p: Personal): string {
+  const tags = p.lines.length === 1 ? p.lines[0].tags : p.tags;
+  const head = `Leftover Tag Alerts: ${p.title}${tags.length ? ` (${tags.join(', ')})` : ''}`;
   const tail = ` ${e.link_url} Reply STOP to end.`;
   const room = 300 - tail.length;
   return (head.length > room ? head.slice(0, room - 1) + '…' : head) + tail;
@@ -189,21 +262,25 @@ export async function sendDigests(env: Env): Promise<number> {
     `SELECT * FROM subscribers WHERE tier = 'free' AND verified_at IS NOT NULL AND unsubscribed_at IS NULL`,
   ).all<Subscriber>();
   const done = await deliveredSet(env, events.map((e) => e.id), 'digest');
+  const items = await itemsFor(env, events.map((e) => e.id));
 
   const batch: { msg: EmailMessage; eventIds: number[]; subId: string }[] = [];
   for (const s of subs) {
-    const mine = events.filter((e) => wants(s, e) && !done.has(`${e.id}:${s.id}`));
+    const mine = events
+      .filter((e) => !done.has(`${e.id}:${s.id}`))
+      .map((e) => ({ e, p: personalize(s, e, items.get(e.id) ?? []) }))
+      .filter((x): x is { e: AlertEvent; p: Personal } => x.p !== null);
     if (!mine.length) continue;
     const upsell = `<div style="background:#e4e9e1;border-radius:4px;padding:12px 14px;font-size:14px;margin-top:8px">
 Leftover and returned tags often sell out within hours. <a href="${manageUrl(env, s)}" style="color:#1f3d35;font-weight:bold">Get instant email and text alerts</a> for ${escapeHtml(env.PAID_PRICE_LABEL)}.</div>`;
     batch.push({
-      eventIds: mine.map((e) => e.id),
+      eventIds: mine.map((x) => x.e.id),
       subId: s.id,
       msg: {
         to: s.email,
-        subject: mine.length === 1 ? mine[0].title : `${mine.length} tag openings since yesterday`,
-        html: layout(env, s, `<div style="font-size:14px;color:#5b6b5e;margin-bottom:16px">Here's what opened up in the last day.</div>${mine.map(eventBlock).join('')}${upsell}`),
-        text: mine.map(eventText).join('\n') + `\nInstant alerts: ${manageUrl(env, s)}\nUnsubscribe: ${unsubscribeUrl(env, s)}`,
+        subject: mine.length === 1 ? mine[0].p.title : `${mine.length} tag openings since yesterday`,
+        html: layout(env, s, `<div style="font-size:14px;color:#5b6b5e;margin-bottom:16px">Here's what opened up in the last day.</div>${mine.map((x) => eventBlock(x.e, x.p)).join('')}${upsell}`),
+        text: mine.map((x) => eventText(x.e, x.p)).join('\n') + `\nInstant alerts: ${manageUrl(env, s)}\nUnsubscribe: ${unsubscribeUrl(env, s)}`,
         headers: listHeaders(env, s),
       },
     });
