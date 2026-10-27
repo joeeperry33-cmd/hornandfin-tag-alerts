@@ -237,7 +237,16 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
       if (baseline || changed) events = await applyListings(env, src, parsed.listings, baseline);
     } else if (changed) {
       const stateName = STATES[src.state] ?? src.state;
-      await insertEvent(env, src, 'page_changed', `${stateName}: the ${src.name} was just updated`, src.notes, src.species, sourceOpening(src), sourceDefaults(src));
+      await insertEvent(
+          env,
+          src,
+          'page_changed',
+          `${stateName}: the ${src.name} page changed`,
+          `This list doesn't post hunt-by-hunt counts, so we can't tell you exactly what changed. Check the page to see if tags opened up.${src.notes ? `\n${src.notes}` : ''}`,
+          src.species,
+          sourceOpening(src),
+          sourceDefaults(src),
+        );
       events = 1;
     }
 

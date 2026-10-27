@@ -14,7 +14,10 @@ export function meaningfulText(html: string, cfg: ChangeConfig = {}): string {
   let text = htmlToText(html);
   if (cfg.start) {
     const i = text.toLowerCase().indexOf(cfg.start.toLowerCase());
-    if (i >= 0) text = text.slice(i);
+    // If the section we watch is gone, say so rather than falling back to the whole page,
+    // which would alert on every unrelated edit.
+    if (i < 0) throw new Error(`Section "${cfg.start}" not found on the page`);
+    text = text.slice(i);
   }
   if (cfg.end) {
     const j = text.toLowerCase().indexOf(cfg.end.toLowerCase(), cfg.start ? cfg.start.length : 0);
