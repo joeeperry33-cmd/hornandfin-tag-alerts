@@ -1,5 +1,6 @@
 import { parseChange, type ChangeConfig } from './parsers/change';
 import { fetchFormReports, type FormConfig } from './parsers/form';
+import { fetchJsonFeed, type JsonConfig } from './parsers/json';
 import { parseTable, type TableConfig } from './parsers/table';
 import { robotsAllows } from './robots';
 import { mergeFacets, type Opening, type TagFacets } from './tagtype';
@@ -245,10 +246,13 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
   let status = 0;
   try {
     let parsed: ParseResult;
-    if (src.parser === 'form') {
+    if (src.parser === 'form' || src.parser === 'json') {
       if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('disallowed by robots.txt');
-      const cfg = JSON.parse(src.parser_config ?? '{}') as FormConfig;
-      const report = await fetchFormReports(src.url, cfg, { 'user-agent': env.USER_AGENT, 'accept-language': 'en-US,en;q=0.9' });
+      const headers = { 'user-agent': env.USER_AGENT, 'accept-language': 'en-US,en;q=0.9' };
+      const report =
+        src.parser === 'form'
+          ? await fetchFormReports(src.url, JSON.parse(src.parser_config ?? '{}') as FormConfig, headers)
+          : await fetchJsonFeed(src.url, JSON.parse(src.parser_config ?? '{}') as JsonConfig, headers);
       status = report.status;
       parsed = report.result;
     } else {

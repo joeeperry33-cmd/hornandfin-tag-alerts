@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
+import { listingsFromJson } from '../src/parsers/json';
 import { checkInterval, diffListings, isDue, normalizeSpecies } from '../src/check';
 import { meaningfulText, parseChange, stablePdfBytes } from '../src/parsers/change';
 import { extractTables, listingsFromTable, parseCsv, parseTable } from '../src/parsers/table';
@@ -339,5 +340,17 @@ describe('Iowa quota categories', () => {
     const l = listingsFromReport(html, cfg, cfg.choices[0]);
     expect(l).toHaveLength(1);
     expect(l[0]).toMatchObject({ key: '10:Adams', label: 'Nonresident antlerless deer, Adams', quantity: 12, residency: 'nonresident', sex: 'antlerless' });
+  });
+});
+
+describe('Pennsylvania WMU feed', () => {
+  it('lists WMUs with licenses remaining', () => {
+    const data = { RemainingWMUs: [{ Name: '1A', MaxQuota: 52000, Remaining: 0 }, { Name: '2B', MaxQuota: 60000, Remaining: 9859 }] };
+    const l = listingsFromJson(data, { dataUrl: 'x', items: 'RemainingWMUs', key: 'Name', quantity: 'Remaining', label: 'Antlerless deer, WMU {Name}', species: 'deer', defaults: { sex: 'antlerless', residency: 'both' } });
+    expect(l).toEqual([{ key: '2B', label: 'Antlerless deer, WMU 2B', species: 'deer', quantity: 9859, weapon: null, sex: 'antlerless', residency: 'both' }]);
+  });
+  it('finds the current season id on the page', () => {
+    const page = `<div id="app" seasonList='[{"Label":"2026 Antlerless Deer License","Value":"86669b4d-e808-471c-8667-d14f70308a91"},{"Label":"2025","Value":"c03eeed5-a140-4ce4-b9ab-55d491e070fc"}]'>`;
+    expect(/seasonList='\[\{[^}]*?"Value":"([0-9a-f-]{36})"/.exec(page)?.[1]).toBe('86669b4d-e808-471c-8667-d14f70308a91');
   });
 });

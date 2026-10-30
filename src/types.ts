@@ -29,7 +29,7 @@ export interface Source {
   url: string;
   link_url: string | null;
   format: 'html' | 'pdf' | 'csv' | 'json';
-  parser: 'change' | 'table' | 'form';
+  parser: 'change' | 'table' | 'form' | 'json';
   parser_config: string | null;
   species: string | null;
   check_minutes: number;
