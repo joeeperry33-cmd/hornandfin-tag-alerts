@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
-import { diffListings, isDue, normalizeSpecies } from '../src/check';
+import { checkInterval, diffListings, isDue, normalizeSpecies } from '../src/check';
 import { meaningfulText, parseChange, stablePdfBytes } from '../src/parsers/change';
 import { extractTables, listingsFromTable, parseCsv, parseTable } from '../src/parsers/table';
 import { isAllowed, parseRobots } from '../src/robots';
@@ -315,5 +315,14 @@ describe('Wyoming license availability report', () => {
   });
   it('reads the hidden form fields to post back', () => {
     expect(hiddenFields(html)).toEqual({ __VIEWSTATE: 'abc&123' });
+  });
+});
+
+describe('busy first-come windows', () => {
+  const src = { check_minutes: 60, season_start: '07-01', season_end: '01-31', rush: '[{"start":"07-16","end":"07-31","minutes":30}]' } as Source;
+  it('checks every 30 minutes during the rush and hourly otherwise', () => {
+    expect(checkInterval(src, new Date('2026-07-20T12:00:00Z'))).toBe(30);
+    expect(checkInterval(src, new Date('2026-08-20T12:00:00Z'))).toBe(60);
+    expect(checkInterval(src, new Date('2026-03-01T12:00:00Z'))).toBe(24 * 60);
   });
 });

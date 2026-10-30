@@ -44,6 +44,8 @@ export interface Source {
   fail_count: number;
   last_error?: string | null;
   opening?: string | null;
+  /** JSON list of busy first-come windows: [{"start":"07-16","end":"07-31","minutes":30}] */
+  rush?: string | null;
 }
 
 export interface Subscriber {

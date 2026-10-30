@@ -10,9 +10,27 @@ const MAX_SOURCES_PER_RUN = 25;
 const MAX_LISTINGS_PER_EVENT = 15;
 const OFF_SEASON_MINUTES = 24 * 60;
 
+/** Check more often during a state's busy first-come weeks (e.g. Wyoming's mid-July sale). */
+export function rushMinutes(src: Source, now = new Date()): number | null {
+  if (!src.rush) return null;
+  try {
+    const windows = JSON.parse(src.rush) as { start: string; end: string; minutes: number }[];
+    const hits = windows.filter((w) => inSeason(w.start, w.end, now)).map((w) => w.minutes);
+    return hits.length ? Math.min(...hits) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function checkInterval(src: Source, now = new Date()): number {
+  const rush = rushMinutes(src, now);
+  if (rush) return Math.min(rush, src.check_minutes);
+  return inSeason(src.season_start, src.season_end, now) ? src.check_minutes : OFF_SEASON_MINUTES;
+}
+
 export function isDue(src: Source, now = new Date()): boolean {
   if (!src.last_checked) return true;
-  const interval = inSeason(src.season_start, src.season_end, now) ? src.check_minutes : OFF_SEASON_MINUTES;
+  const interval = checkInterval(src, now);
   // Back off failing sources: double the interval per failure, up to a day.
   const backoff = Math.min(interval * 2 ** Math.min(src.fail_count, 5), OFF_SEASON_MINUTES);
   const elapsed = (now.getTime() - new Date(src.last_checked).getTime()) / 60000;
