@@ -66,6 +66,7 @@ export interface Subscriber {
   weapons?: string;
   sexes?: string;
   home_state?: string | null;
+  page_alerts?: number;
 }
 
 export interface AlertEvent {

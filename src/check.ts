@@ -60,9 +60,9 @@ export async function parseSource(src: Source, body: ArrayBuffer): Promise<Parse
     try {
       return await parseTable(body, src.format, cfg as TableConfig);
     } catch (err) {
-      // Layout changed or wasn't what we expected: still alert on any change.
-      console.warn(`table parse failed for ${src.id}, falling back to change detection:`, err instanceof Error ? err.message : err);
-      return parseChange(body, src.format, (cfg as { change?: ChangeConfig }).change ?? {});
+      // Table missing or laid out differently (often a brief outage page). Record the error and
+      // keep the last good snapshot instead of alerting on unrelated page text.
+      throw new Error(`Hunt table not readable: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return parseChange(body, src.format, cfg as ChangeConfig);

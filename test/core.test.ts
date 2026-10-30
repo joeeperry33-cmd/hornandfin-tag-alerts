@@ -160,7 +160,11 @@ describe('robots.txt', () => {
 describe('subscriber matching and messages', () => {
   const sub = { states: 'CO,UT', species: 'elk' } as Subscriber;
   const ev = (state: string, species: string | null) => ({ state, species, title: 't', detail: null, kind: 'page_changed' }) as AlertEvent;
-  const wants = (s: Subscriber, e: AlertEvent) => personalize(s, e, []) !== null;
+  const wants = (s: Subscriber, e: AlertEvent) => personalize({ ...s, page_alerts: 1 } as Subscriber, e, []) !== null;
+  it('sends page-change alerts only to people who opted in', () => {
+    expect(personalize(sub, ev('CO', 'elk'), [])).toBeNull();
+    expect(personalize({ ...sub, page_alerts: 1 } as Subscriber, ev('CO', 'elk'), [])).not.toBeNull();
+  });
   it('matches by state and species; unknown species goes to state followers', () => {
     expect(wants(sub, ev('CO', 'elk,deer'))).toBe(true);
     expect(wants(sub, ev('CO', 'deer'))).toBe(false);

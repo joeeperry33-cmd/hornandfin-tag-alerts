@@ -83,7 +83,10 @@ ${plan}
 <select id="home_state" name="home_state"><option value="">Don't filter by residency</option>${states
     .map(([code, name]) => `<option value="${code}"${sub.home_state === code ? ' selected' : ''}>${escapeHtml(name)}</option>`)
     .join('')}</select>
-<p class="muted" style="font-size:14px;margin-top:6px">Set this to skip resident-only tags in other states and nonresident-only tags in yours.</p></div>
+<p class="muted" style="font-size:14px;margin-top:6px">Set this to skip resident-only tags in other states and nonresident-only tags in yours.</p>
+<div class="sub">Page-change alerts</div>
+<label class="chk"><input type="checkbox" name="page_alerts" value="1"${sub.page_alerts ? ' checked' : ''}> Also email me when a state's page changes</label>
+<p class="muted" style="font-size:14px;margin-top:4px">Some states don't post hunt-by-hunt counts, so all we can see is that their page changed. Often it's not a new tag. Leave this off to get alerts only when a hunt opens up or more tags come back.</p></div>
 <div class="panel"><h2>States</h2>
 <div class="row" style="margin-bottom:10px"><button type="button" class="linkbtn" data-all="1">Select all</button><button type="button" class="linkbtn" data-all="0">Clear</button></div>
 <div class="grid">${checkboxes('states', states, sub.states)}</div></div>
@@ -100,7 +103,7 @@ form.onsubmit=async e=>{e.preventDefault();errBox.textContent='';
  if(!vals('states').length||!vals('species').length){errBox.textContent='Pick at least one state and one species.';return;}
  if(!vals('openings').length||!vals('weapons').length||!vals('sexes').length){errBox.textContent='Pick at least one option under each tag type.';return;}
  const phone=form.querySelector('[name=phone]');const consent=form.querySelector('[name=sms_consent]');
- try{await post('/api/manage',{states:vals('states'),species:vals('species'),openings:vals('openings'),weapons:vals('weapons'),sexes:vals('sexes'),home_state:form.querySelector('[name=home_state]').value,phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
+ try{await post('/api/manage',{states:vals('states'),species:vals('species'),openings:vals('openings'),weapons:vals('weapons'),sexes:vals('sexes'),home_state:form.querySelector('[name=home_state]').value,page_alerts:form.querySelector('[name=page_alerts]').checked,phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
 const up=document.getElementById('upgrade');if(up)up.onclick=async()=>{try{const d=await post('/api/checkout',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
 const bill=document.getElementById('billing');if(bill)bill.onclick=async()=>{try{const d=await post('/api/billing',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
 </script>`;

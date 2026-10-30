@@ -109,6 +109,8 @@ export function personalize(sub: Subscriber, e: AlertEvent, items: EventItem[]):
   const f = filterOf(sub);
   const opening = (e.opening as Opening) ?? null;
   if (!items.length) {
+    // A page changed but we can't see hunt-level counts. Opt-in only, since it may not be a new tag.
+    if (e.kind === 'page_changed' && !sub.page_alerts) return null;
     if (!matchesList(sub.species, e.species)) return null;
     const facets = facetsOf(e);
     if (!tagWanted(f, e.state, opening, facets)) return null;

@@ -106,7 +106,7 @@ export async function loadHomeData(env: Env): Promise<HomeData> {
     env.DB.prepare('SELECT state, name FROM sources WHERE active = 1 ORDER BY state, name').all<{ state: string; name: string }>(),
     env.DB.prepare('SELECT DISTINCT state FROM sources WHERE active = 0 AND state NOT IN (SELECT state FROM sources WHERE active = 1)').all<{ state: string }>(),
     env.DB.prepare('SELECT MAX(last_checked) AS t FROM sources WHERE active = 1').first<{ t: string | null }>(),
-    env.DB.prepare('SELECT state, title, link_url, created_at, opening FROM events WHERE created_at <= ? ORDER BY created_at DESC LIMIT 6').bind(delay).all<HomeData['recent'][number]>(),
+    env.DB.prepare('SELECT state, title, link_url, created_at, opening FROM events WHERE kind <> \'page_changed\' AND created_at <= ? ORDER BY created_at DESC LIMIT 6').bind(delay).all<HomeData['recent'][number]>(),
   ]);
   return { watched: watched.results, unwatchedStates: inactive.results.map((r) => r.state), lastChecked: last?.t ?? null, recent: recent.results };
 }

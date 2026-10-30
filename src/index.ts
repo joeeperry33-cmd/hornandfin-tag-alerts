@@ -169,6 +169,7 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
   const sexes = allOrList(b.sexes, SEX_CHOICES);
   const home = String(b.home_state ?? '').trim().toUpperCase();
   const homeState = STATE_CODES.includes(home) ? home : null;
+  const pageAlerts = b.page_alerts === true ? 1 : 0;
   let phone = sub.phone;
   let consentAt = sub.sms_consent_at;
   let stopped = sub.sms_stopped;
@@ -182,8 +183,8 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
       if (!consentAt || phone !== sub.phone || stopped) { consentAt = nowIso(); stopped = 0; }
     }
   }
-  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, openings = ?, weapons = ?, sexes = ?, home_state = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
-    .bind(states, species, openings, weapons, sexes, homeState, phone, consentAt, stopped, sub.id)
+  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, openings = ?, weapons = ?, sexes = ?, home_state = ?, page_alerts = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
+    .bind(states, species, openings, weapons, sexes, homeState, pageAlerts, phone, consentAt, stopped, sub.id)
     .run();
   return json({ ok: true });
 }
@@ -212,8 +213,8 @@ async function feed(env: Env, url: URL, req: Request): Promise<Response> {
   const delayHours = 12; // public feed lags so paid alerts keep their head start
   const before = new Date(Date.now() - delayHours * 3600_000).toISOString();
   const q = STATES[state]
-    ? env.DB.prepare('SELECT id, state, species, title, detail, link_url, created_at FROM events WHERE state = ? AND created_at <= ? ORDER BY created_at DESC LIMIT ?').bind(state, before, limit)
-    : env.DB.prepare('SELECT id, state, species, title, detail, link_url, created_at FROM events WHERE created_at <= ? ORDER BY created_at DESC LIMIT ?').bind(before, limit);
+    ? env.DB.prepare('SELECT id, state, species, title, detail, link_url, created_at FROM events WHERE kind <> \'page_changed\' AND state = ? AND created_at <= ? ORDER BY created_at DESC LIMIT ?').bind(state, before, limit)
+    : env.DB.prepare('SELECT id, state, species, title, detail, link_url, created_at FROM events WHERE kind <> \'page_changed\' AND created_at <= ? ORDER BY created_at DESC LIMIT ?').bind(before, limit);
   const { results } = await q.all<AlertEvent>();
   return json({ events: results, delay_hours: delayHours }, 200, { 'cache-control': 'public, max-age=300', 'access-control-allow-origin': '*' });
 }
