@@ -326,3 +326,18 @@ describe('busy first-come windows', () => {
     expect(checkInterval(src, new Date('2026-03-01T12:00:00Z'))).toBe(24 * 60);
   });
 });
+
+describe('Iowa quota categories', () => {
+  it('uses the per-category key columns and skips sold-out rows', () => {
+    const html = `<table><tr><th>County ID</th><th>County Name</th><th>Limit</th><th>Remaining</th></tr>
+      <tr><td>01</td><td>Adair</td><td>30</td><td>0</td></tr><tr><td>02</td><td>Adams</td><td>30</td><td>12</td></tr></table>`;
+    const cfg: FormConfig = {
+      field: 'cat', postback: true,
+      choices: [{ value: '10', species: 'deer', label: 'Nonresident antlerless deer,', defaults: { residency: 'nonresident', sex: 'antlerless' }, table: { keyColumns: ['county name'] } }],
+      table: { headerMatch: 'remaining', keyColumns: ['zone'], quantityColumn: 'remaining' },
+    };
+    const l = listingsFromReport(html, cfg, cfg.choices[0]);
+    expect(l).toHaveLength(1);
+    expect(l[0]).toMatchObject({ key: '10:Adams', label: 'Nonresident antlerless deer, Adams', quantity: 12, residency: 'nonresident', sex: 'antlerless' });
+  });
+});

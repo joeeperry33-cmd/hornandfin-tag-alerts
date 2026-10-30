@@ -12,8 +12,10 @@ export interface FormConfig {
   field: string;
   /** Submit button name and value, sent like a click. */
   submit?: { name: string; value: string };
-  /** One report per choice. */
-  choices: { value: string; species: string; label: string; defaults?: TableConfig['defaults'] }[];
+  /** The dropdown reloads the page itself when changed (ASP.NET AutoPostBack), as on Iowa's quota page. */
+  postback?: boolean;
+  /** One report per choice. A choice can override the table layout (key columns differ by report). */
+  choices: { value: string; species: string; label: string; defaults?: TableConfig['defaults']; table?: Partial<TableConfig> }[];
   table: TableConfig;
 }
 
@@ -33,12 +35,13 @@ export function hiddenFields(html: string): Record<string, string> {
 export function listingsFromReport(html: string, cfg: FormConfig, choice: FormConfig['choices'][number]): ParsedListing[] {
   let table;
   try {
-    table = pickTable(extractTables(html), cfg.table);
+    table = pickTable(extractTables(html), { ...cfg.table, ...choice.table });
   } catch (err) {
     throw new Error(`${choice.label} report: ${err instanceof Error ? err.message : String(err)} (${pageSummary(html)})`);
   }
   return listingsFromTable(table, {
     ...cfg.table,
+    ...choice.table,
     species: choice.species,
     keyPrefix: choice.value,
     labelPrefix: choice.label,
@@ -76,6 +79,7 @@ export async function fetchFormReports(
     const body = new URLSearchParams(hidden);
     body.set(cfg.field, choice.value);
     if (cfg.submit) body.set(cfg.submit.name, cfg.submit.value);
+    if (cfg.postback) body.set('__EVENTTARGET', cfg.field);
     let res = await fetch(url, {
       method: 'POST',
       headers: { ...headers, 'content-type': 'application/x-www-form-urlencoded', referer: url, cookie: cookieHeader() },
