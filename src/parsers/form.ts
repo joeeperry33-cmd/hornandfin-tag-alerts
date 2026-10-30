@@ -56,12 +56,19 @@ export async function fetchFormReports(
   const formHtml = await get.text();
   const hidden = hiddenFields(formHtml);
   if (!hidden.__VIEWSTATE && !Object.keys(hidden).length) throw new Error(`Report form not found (${pageSummary(formHtml)})`);
-  // Keep the session cookie the form hands out, as a browser would.
-  const setCookies = (get.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ?? [get.headers.get('set-cookie') ?? ''];
-  const cookie = setCookies
-    .map((c) => c.split(';')[0].trim())
-    .filter(Boolean)
-    .join('; ');
+  // Keep the session cookies the site hands out, as a browser would. The report page reads the
+  // chosen species from the session set when the form is posted, then redirects.
+  const jar = new Map<string, string>();
+  const keep = (res: Response) => {
+    const list = (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ?? [res.headers.get('set-cookie') ?? ''];
+    for (const c of list) {
+      const pair = c.split(';')[0].trim();
+      const i = pair.indexOf('=');
+      if (i > 0) jar.set(pair.slice(0, i), pair.slice(i + 1));
+    }
+  };
+  const cookieHeader = () => [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+  keep(get);
 
   const listings: ParsedListing[] = [];
   let status = get.status;
@@ -69,12 +76,20 @@ export async function fetchFormReports(
     const body = new URLSearchParams(hidden);
     body.set(cfg.field, choice.value);
     if (cfg.submit) body.set(cfg.submit.name, cfg.submit.value);
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       method: 'POST',
-      headers: { ...headers, 'content-type': 'application/x-www-form-urlencoded', referer: url, ...(cookie ? { cookie } : {}) },
+      headers: { ...headers, 'content-type': 'application/x-www-form-urlencoded', referer: url, cookie: cookieHeader() },
       body,
+      redirect: 'manual',
       signal: AbortSignal.timeout(25000),
     });
+    keep(res);
+    // Follow the redirect to the report ourselves so the session cookie goes with it.
+    for (let hops = 0; hops < 3 && res.status >= 300 && res.status < 400 && res.headers.get('location'); hops++) {
+      const next = new URL(res.headers.get('location')!, url).toString();
+      res = await fetch(next, { headers: { ...headers, referer: url, cookie: cookieHeader() }, redirect: 'manual', signal: AbortSignal.timeout(25000) });
+      keep(res);
+    }
     status = res.status;
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${choice.label} report`);
     listings.push(...listingsFromReport(await res.text(), cfg, choice));
