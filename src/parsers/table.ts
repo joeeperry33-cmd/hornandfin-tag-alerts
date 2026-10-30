@@ -162,9 +162,22 @@ export function parseCsv(text: string): Table {
   return rows;
 }
 
+/** What a page that isn't the expected report looks like, for the error log: title, table count, opening text. */
+export function pageSummary(html: string): string {
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+  const tables = (html.match(/<table\b/gi) ?? []).length;
+  const text = decodeEntities(html.replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 140);
+  return `got ${html.length} bytes, ${tables} table(s), title "${title}": ${text}`;
+}
+
 export async function parseTable(body: ArrayBuffer, format: string, cfg: TableConfig): Promise<ParseResult> {
   const text = new TextDecoder().decode(body);
-  const table = format === 'csv' ? parseCsv(text) : pickTable(extractTables(text), cfg);
+  let table: Table;
+  try {
+    table = format === 'csv' ? parseCsv(text) : pickTable(extractTables(text), cfg);
+  } catch (err) {
+    throw new Error(`${err instanceof Error ? err.message : String(err)} (${pageSummary(text)})`);
+  }
   const listings = listingsFromTable(table, cfg);
   const canonical = listings
     .map((l) => `${l.key}=${l.quantity ?? ''}`)

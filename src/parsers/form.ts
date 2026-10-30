@@ -1,4 +1,4 @@
-import { extractTables, listingsFromTable, pickTable, type TableConfig } from './table';
+import { extractTables, listingsFromTable, pageSummary, pickTable, type TableConfig } from './table';
 import { decodeEntities, sha256 } from '../util';
 import type { ParsedListing, ParseResult } from '../types';
 
@@ -31,7 +31,12 @@ export function hiddenFields(html: string): Record<string, string> {
 }
 
 export function listingsFromReport(html: string, cfg: FormConfig, choice: FormConfig['choices'][number]): ParsedListing[] {
-  const table = pickTable(extractTables(html), cfg.table);
+  let table;
+  try {
+    table = pickTable(extractTables(html), cfg.table);
+  } catch (err) {
+    throw new Error(`${choice.label} report: ${err instanceof Error ? err.message : String(err)} (${pageSummary(html)})`);
+  }
   return listingsFromTable(table, {
     ...cfg.table,
     species: choice.species,
@@ -48,10 +53,12 @@ export async function fetchFormReports(
 ): Promise<{ status: number; result: ParseResult }> {
   const get = await fetch(url, { headers, signal: AbortSignal.timeout(25000) });
   if (!get.ok) throw new Error(`HTTP ${get.status} loading the report form`);
-  const hidden = hiddenFields(await get.text());
+  const formHtml = await get.text();
+  const hidden = hiddenFields(formHtml);
+  if (!hidden.__VIEWSTATE && !Object.keys(hidden).length) throw new Error(`Report form not found (${pageSummary(formHtml)})`);
   // Keep the session cookie the form hands out, as a browser would.
-  const cookie = (get.headers.get('set-cookie') ?? '')
-    .split(/,(?=\s*[^;,=\s]+=)/)
+  const setCookies = (get.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ?? [get.headers.get('set-cookie') ?? ''];
+  const cookie = setCookies
     .map((c) => c.split(';')[0].trim())
     .filter(Boolean)
     .join('; ');
