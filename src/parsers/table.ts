@@ -22,6 +22,25 @@ export interface TableConfig {
   nonresidentColumn?: string;
   /** Tag type shared by every hunt on this list, used where a row doesn't say. */
   defaults?: TagFacets;
+  /** Header holding who can buy it as words ("Resident", "Non-resident", "Either"). */
+  residencyColumn?: string;
+  /** Skip rows whose count isn't a number ("Sold Out", "Season Closed", "Unlimited"). */
+  requireQuantity?: boolean;
+  /** Regexes removed from each label cell (repeated hunt codes, boilerplate). */
+  labelStrip?: string[];
+  /** Put in front of every key and label, e.g. the species when one source covers several reports. */
+  keyPrefix?: string;
+  labelPrefix?: string;
+}
+
+const MAX_LABEL = 140;
+
+function residencyWord(v: string): 'resident' | 'nonresident' | 'both' | null {
+  const t = v.toLowerCase();
+  if (/either|both|\ball\b|\bany\b/.test(t)) return 'both';
+  if (/non-?\s?res/.test(t)) return 'nonresident';
+  if (/res/.test(t)) return 'resident';
+  return null;
 }
 
 export type Table = string[][];
@@ -74,14 +93,23 @@ export function listingsFromTable(table: Table, cfg: TableConfig): ParsedListing
   const spIdx = cfg.speciesColumn ? colIndex(header, cfg.speciesColumn) : -1;
   const skipZero = cfg.skipZero ?? true;
   const nrIdx = cfg.nonresidentColumn ? colIndex(header, cfg.nonresidentColumn) : -1;
+  const resIdx = cfg.residencyColumn ? colIndex(header, cfg.residencyColumn) : -1;
+  const strip = (cfg.labelStrip ?? []).map((p) => new RegExp(p, 'gi'));
 
   const out = new Map<string, ParsedListing>();
   for (const row of rows) {
-    const key = keyIdx.map((i) => row[i] ?? '').join(' | ').trim();
-    if (!key || key.replace(/\|/g, '').trim() === '') continue;
+    const rawKey = keyIdx.map((i) => row[i] ?? '').join(' | ').trim();
+    if (!rawKey || rawKey.replace(/\|/g, '').trim() === '') continue;
+    const key = (cfg.keyPrefix ? `${cfg.keyPrefix}:` : '') + rawKey;
     const quantity = qtyIdx >= 0 ? parseQuantity(row[qtyIdx] ?? '') : null;
     if (skipZero && quantity !== null && quantity <= 0) continue;
-    const label = labelIdx.map((i) => row[i]).filter(Boolean).join(' – ');
+    if (cfg.requireQuantity && quantity === null) continue;
+    let label = labelIdx
+      .map((i) => strip.reduce((t, re) => t.replace(re, ''), row[i] ?? '').trim())
+      .filter(Boolean)
+      .join(' – ');
+    if (cfg.labelPrefix) label = `${cfg.labelPrefix} ${label}`;
+    if (label.length > MAX_LABEL) label = label.slice(0, MAX_LABEL - 1).trimEnd() + '…';
     const species = spIdx >= 0 ? (row[spIdx] ?? '').toLowerCase() : cfg.species;
     // Tag type: read from the whole row (hunt name, weapon, season columns), then fall back to the list's defaults.
     const found = classify(row.join(' '));
@@ -89,6 +117,7 @@ export function listingsFromTable(table: Table, cfg: TableConfig): ParsedListing
       const nr = parseQuantity(row[nrIdx] ?? '');
       if (nr !== null) found.residency = nr > 0 ? 'both' : 'resident';
     }
+    if (resIdx >= 0) found.residency = residencyWord(row[resIdx] ?? '') ?? found.residency;
     const facets = mergeFacets(found, cfg.defaults);
     out.set(key, { key, label: label || key, species, quantity, weapon: facets.weapon ?? null, sex: facets.sex ?? null, residency: facets.residency ?? null });
   }

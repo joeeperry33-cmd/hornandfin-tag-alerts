@@ -1,4 +1,5 @@
 import { parseChange, type ChangeConfig } from './parsers/change';
+import { fetchFormReports, type FormConfig } from './parsers/form';
 import { parseTable, type TableConfig } from './parsers/table';
 import { robotsAllows } from './robots';
 import { mergeFacets, type Opening, type TagFacets } from './tagtype';
@@ -225,10 +226,19 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
   const ts = nowIso();
   let status = 0;
   try {
-    const fetched = await fetchSource(env, src);
-    status = fetched.status;
-    if (!fetched.body) throw new Error(`HTTP ${fetched.status}`);
-    const parsed = await parseSource(src, fetched.body);
+    let parsed: ParseResult;
+    if (src.parser === 'form') {
+      if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('disallowed by robots.txt');
+      const cfg = JSON.parse(src.parser_config ?? '{}') as FormConfig;
+      const report = await fetchFormReports(src.url, cfg, { 'user-agent': env.USER_AGENT, 'accept-language': 'en-US,en;q=0.9' });
+      status = report.status;
+      parsed = report.result;
+    } else {
+      const fetched = await fetchSource(env, src);
+      status = fetched.status;
+      if (!fetched.body) throw new Error(`HTTP ${fetched.status}`);
+      parsed = await parseSource(src, fetched.body);
+    }
     const baseline = !src.last_hash;
     const changed = !baseline && parsed.hash !== src.last_hash;
     let events = 0;

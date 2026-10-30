@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
 import { diffListings, isDue, normalizeSpecies } from '../src/check';
 import { meaningfulText, parseChange, stablePdfBytes } from '../src/parsers/change';
 import { extractTables, listingsFromTable, parseCsv, parseTable } from '../src/parsers/table';
@@ -284,5 +285,35 @@ describe('tag types', () => {
     const { facetLabels } = await import('../src/tagtype');
     expect(facetLabels('leftover', { weapon: 'muzzleloader', sex: 'antlered', residency: 'both' })).toEqual(['Leftover', 'Muzzleloader', 'Antlered', 'Residents and nonresidents']);
     expect(facetLabels(null, {})).toEqual([]);
+  });
+});
+
+describe('Wyoming license availability report', () => {
+  const row = (area: string, elig: string, desc: string, avail: string) =>
+    `<tr class="GridDetails"><td class="GridDetails"><span>2026</span></td><td class="GridDetails" align="center"><span>${area}</span>
+     <span class="wgfd-section-label-important"></span></td><td class="GridDetails"><span>${elig}</span></td>
+     <td class="GridDetails"><span>${desc}</span></td><td class="GridDetails" align="right"><span>${avail}</span></td></tr>`;
+  const html = `<html><body><form><input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="abc&amp;123" /></form><table>
+    <tr class="GridHeader"><td>Season</td><td>Hunt Area/Type</td><td>Eligible</td><td>Description</td><td>Available</td></tr>
+    ${row('H', 'NON-RESIDENT', 'REGION H GENERAL; REGION H GENERAL', 'Season Closed')}
+    ${row('GEN', 'RESIDENT', 'GENERAL; GENERAL', 'Unlimited')}
+    ${row('008-3', 'EITHER', '8-3; LIMITED QUOTA; Oct. 1 - Nov. 30 Any white-tailed deer', 'Sold Out')}
+    ${row('033-4 *', 'EITHER', '33-4; LIMITED QUOTA; Oct. 9 - Oct. 31 Antlerless elk', '15')}
+    ${row('122-2', 'NON-RESIDENT', '122-2; LIMITED QUOTA; Oct. 10 - Nov. 30 Antlered elk five (5) points or less', '9')}
+  </table></body></html>`;
+  const cfg: FormConfig = {
+    field: 'ddlSpecies',
+    choices: [{ value: '53', species: 'elk', label: 'Elk' }],
+    table: { headerMatch: 'hunt area', keyColumns: ['hunt area', 'eligible'], labelColumns: ['hunt area', 'description'], quantityColumn: 'available', residencyColumn: 'eligible', requireQuantity: true, labelStrip: ['\\s*\\*$', '^[\\w-]+; (LIMITED QUOTA|GENERAL); ?'] },
+  };
+  it('keeps only hunts with a number available, with clean labels and tag types', () => {
+    const l = listingsFromReport(html, cfg, cfg.choices[0]);
+    expect(l.map((x) => x.key)).toEqual(['53:033-4 * | EITHER', '53:122-2 | NON-RESIDENT']);
+    expect(l[0].label).toBe('Elk 033-4 – Oct. 9 - Oct. 31 Antlerless elk');
+    expect(l[0]).toMatchObject({ quantity: 15, species: 'elk', sex: 'antlerless', residency: 'both' });
+    expect(l[1]).toMatchObject({ quantity: 9, sex: 'antlered', residency: 'nonresident' });
+  });
+  it('reads the hidden form fields to post back', () => {
+    expect(hiddenFields(html)).toEqual({ __VIEWSTATE: 'abc&123' });
   });
 });

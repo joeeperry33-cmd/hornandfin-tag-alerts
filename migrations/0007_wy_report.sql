@@ -1,0 +1,7 @@
+-- Wyoming: read the live License Availability report (one form submit per species) instead of watching the leftover page.
+UPDATE sources SET parser = 'form', format = 'html', url = 'https://wgfapps.wyo.gov/QuotaAvailability/SelectionCriteria.aspx',
+  link_url = 'https://wgfapps.wyo.gov/QuotaAvailability/SelectionCriteria.aspx', name = 'Wyoming license availability report',
+  check_minutes = 30, season_start = '07-01', season_end = '01-31', species = 'elk,deer,pronghorn,turkey',
+  notes = 'Live counts by hunt area. First-come sales open mid-July after the leftover draw.', last_hash = NULL, last_error = NULL,
+  parser_config = '{"field": "ddlSpecies", "submit": {"name": "btnRunReport", "value": "Check Quota"}, "choices": [{"value": "53", "species": "elk", "label": "Elk"}, {"value": "54", "species": "elk", "label": "Cow/calf elk", "defaults": {"sex": "antlerless"}}, {"value": "51", "species": "deer", "label": "Deer"}, {"value": "52", "species": "deer", "label": "Doe/fawn deer", "defaults": {"sex": "antlerless"}}, {"value": "49", "species": "pronghorn", "label": "Antelope"}, {"value": "50", "species": "pronghorn", "label": "Doe/fawn antelope", "defaults": {"sex": "antlerless"}}, {"value": "55", "species": "turkey", "label": "Fall turkey"}], "table": {"headerMatch": "hunt area", "keyColumns": ["hunt area", "eligible"], "labelColumns": ["hunt area", "description"], "quantityColumn": "available", "residencyColumn": "eligible", "requireQuantity": true, "labelStrip": ["\\s*\\*$", "^[\\w-]+; (LIMITED QUOTA|GENERAL); ?"]}}'
+  WHERE id = 'wy-leftover';
