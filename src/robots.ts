@@ -67,11 +67,17 @@ export async function robotsAllows(url: string, userAgent: string): Promise<bool
   const u = new URL(url);
   const key = u.origin;
   let entry = cache.get(key);
-  if (!entry || Date.now() - entry.at > 6 * 3600_000) {
+  if (!entry || Date.now() - entry.at > 24 * 3600_000) {
     let groups: Group[] = [];
     let res: Response;
     try {
-      res = await fetch(`${u.origin}/robots.txt`, { headers: { 'user-agent': userAgent }, signal: AbortSignal.timeout(10000) });
+      // Cached at Cloudflare's edge for a day, so a state's server sees one robots.txt request per day
+      // instead of one before every check (the in-memory cache rarely survives between runs).
+      res = await fetch(`${u.origin}/robots.txt`, {
+        headers: { 'user-agent': userAgent },
+        signal: AbortSignal.timeout(10000),
+        cf: { cacheTtl: 86400, cacheEverything: true },
+      } as RequestInit);
     } catch (err) {
       // Can't read robots.txt: don't fetch the page this round.
       throw new Error(`robots.txt unreachable: ${err instanceof Error ? err.message : String(err)}`);
