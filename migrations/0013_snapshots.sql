@@ -7,6 +7,6 @@ CREATE TABLE IF NOT EXISTS snapshots (
   captured_at TEXT NOT NULL
 );
 UPDATE sources SET parser = 'snapshot', format = 'html', active = 1, check_minutes = 15, last_hash = NULL, last_error = NULL, last_checked = NULL, fail_count = 0,
-  parser_config = '{"format":"colorado","staleHours":6}', link_url = 'https://cpw.state.co.us/Documents/Leftover.pdf',
+  parser_config = '{"format":"colorado","staleHours":14}', link_url = 'https://cpw.state.co.us/Documents/Leftover.pdf',
   notes = 'Leftovers need no preference points. Read from CPW''s list viewer by a browser on the owner''s computer; updated hourly by CPW.'
   WHERE id = 'co-leftover';
