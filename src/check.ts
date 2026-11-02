@@ -1,6 +1,7 @@
 import { parseChange, type ChangeConfig } from './parsers/change';
 import { fetchFormReports, type FormConfig } from './parsers/form';
 import { fetchJsonFeed, type JsonConfig } from './parsers/json';
+import { coloradoRunDate, parseColorado } from './parsers/colorado';
 import { parseTable, type TableConfig } from './parsers/table';
 import { robotsAllows } from './robots';
 import { mergeFacets, type Opening, type TagFacets } from './tagtype';
@@ -246,7 +247,20 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
   let status = 0;
   try {
     let parsed: ParseResult;
-    if (src.parser === 'form' || src.parser === 'json') {
+    if (src.parser === 'snapshot') {
+      // Text copied from the state's page by a browser on the owner's computer (see migrations/0013).
+      const cfg = JSON.parse(src.parser_config ?? '{}') as { staleHours?: number };
+      const snap = await env.DB.prepare('SELECT body, captured_at FROM snapshots WHERE source_id = ?')
+        .bind(src.id)
+        .first<{ body: string; captured_at: string }>();
+      if (!snap) throw new Error('No browser snapshot yet');
+      const ageHours = (Date.now() - new Date(snap.captured_at).getTime()) / 3600_000;
+      if (ageHours > (cfg.staleHours ?? 6)) {
+        throw new Error(`Browser snapshot is ${Math.round(ageHours)} hours old (last list run ${coloradoRunDate(snap.body) ?? 'unknown'}); is the computer on with the Claude app open?`);
+      }
+      status = 200;
+      parsed = await parseColorado(snap.body);
+    } else if (src.parser === 'form' || src.parser === 'json') {
       if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('disallowed by robots.txt');
       const headers = { 'user-agent': env.USER_AGENT, 'accept-language': 'en-US,en;q=0.9' };
       const report =

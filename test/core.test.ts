@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
+import { coloradoListings, coloradoRunDate, parseColoradoText } from '../src/parsers/colorado';
 import { listingsFromJson } from '../src/parsers/json';
 import { checkInterval, diffListings, isDue, normalizeSpecies } from '../src/check';
 import { meaningfulText, parseChange, stablePdfBytes } from '../src/parsers/change';
@@ -352,5 +353,24 @@ describe('Pennsylvania WMU feed', () => {
   it('finds the current season id on the page', () => {
     const page = `<div id="app" seasonList='[{"Label":"2026 Antlerless Deer License","Value":"86669b4d-e808-471c-8667-d14f70308a91"},{"Label":"2025","Value":"c03eeed5-a140-4ce4-b9ab-55d491e070fc"}]'>`;
     expect(/seasonList='\[\{[^}]*?"Value":"([0-9a-f-]{36})"/.exec(page)?.[1]).toBe('86669b4d-e808-471c-8667-d14f70308a91');
+  });
+});
+
+describe('Colorado leftover list (browser snapshot)', () => {
+  const text = `Run Date and Time: Nov 02 2026 8:44:00 AM MST\nDue to delays in processing, this data may be up to one hour old.\n\n\nLimited Licensing Leftover\n\n\nCOLORADO PARKS AND WILDLIFE\n\n\nHUNT CODE\n \nLIST\nVALID UNITS (GMU)\n \nDESCRIPTION\nSEASON DATES\n\n\nAVAILABLE\n\n\nQUOTA\n\n\nPRONGHORN\n\n\nB\n \nPRIVATE LAND ONLY\n12/05/2026 - 12/13/2026\nAF133P5R\n \n133,134,140,141,\n\n\n147\n\n\n49\n\n\nDEER\n\n\nA\n \nWHITETAIL ONLY\n10/01/2026 - 10/23/2026,\n\n\n11/04/2026 - 11/30/2026,\n\n\n12/15/2026 - 12/31/2026\n\n\nDE104O3A\n \n104,105,106\n \n29\n\n\nC\n \nSPECIAL RESTRICTIONS SEE\n\n\nBROCHURE,\n\n\nPRIVATE LAND ONLY EAST OF HWY 71\n\n\n10/01/2026 - 01/31/2027\nDF096P6X\n \n096\n \n152\nRun Date and Time: Nov 02 2026 8:44:00 AM MST\nDue to delays in processing, this data may be up to one hour old.\n\n\nELK\n\n\nA\n \n11/18/2026 - 11/22/2026\nEF011O4R\n \n011,012,013,023,\n\n\n024,211\n\n\n1468\n\n\nA\n \n11/18/2026 - 11/22/2026\nEM231O4R\n \n231\n \n24`;
+  it('reads every hunt with units, dates, restrictions and count', () => {
+    const h = parseColoradoText(text);
+    expect(h.map((x) => x.code)).toEqual(['AF133P5R', 'DE104O3A', 'DF096P6X', 'EF011O4R', 'EM231O4R']);
+    expect(h[0]).toMatchObject({ list: 'B', description: 'PRIVATE LAND ONLY', dates: '12/05/2026 - 12/13/2026', units: '133,134,140,141,147', available: 49 });
+    expect(h[1]).toMatchObject({ description: 'WHITETAIL ONLY', dates: '10/01/2026 - 10/23/2026, 11/04/2026 - 11/30/2026, 12/15/2026 - 12/31/2026', available: 29 });
+    expect(h[2]).toMatchObject({ list: 'C', description: 'SPECIAL RESTRICTIONS SEE BROCHURE, PRIVATE LAND ONLY EAST OF HWY 71', available: 152 });
+    expect(h[3]).toMatchObject({ units: '011,012,013,023,024,211', available: 1468 });
+  });
+  it('decodes tag type from the hunt code', () => {
+    const l = coloradoListings(text);
+    expect(l.find((x) => x.key === 'DE104O3A')).toMatchObject({ species: 'deer', sex: 'either', weapon: 'archery' });
+    expect(l.find((x) => x.key === 'EF011O4R')).toMatchObject({ species: 'elk', sex: 'antlerless', weapon: 'rifle', quantity: 1468 });
+    expect(l.find((x) => x.key === 'EM231O4R')!.label).toBe('Elk EM231O4R – GMU 231 – 11/18/2026 - 11/22/2026 – List A');
+    expect(coloradoRunDate(text)).toBe('Nov 02 2026 8:44:00 AM MST');
   });
 });
