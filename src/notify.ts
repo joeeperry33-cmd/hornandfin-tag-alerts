@@ -77,7 +77,7 @@ function layout(env: Env, sub: Subscriber, inner: string): string {
 <tr><td style="padding:16px 24px;background:#e4e9e1;font-size:12px;color:#4f5c55;line-height:1.6">
 Tag availability changes fast and is set by each state agency. Always confirm on the state's site before you travel.<br>
 <a href="${manageUrl(env, sub)}" style="color:#1f3d35">Change states or species</a> &nbsp;|&nbsp; <a href="${unsubscribeUrl(env, sub)}" style="color:#1f3d35">Unsubscribe</a><br>
-${escapeHtml(env.SITE_NAME)}, operated by ${escapeHtml(env.BUSINESS_NAME)}<br>${escapeHtml(env.BUSINESS_ADDRESS)}
+${escapeHtml(env.SITE_NAME)}, operated by ${env.PARTNER_URL ? `<a href="${escapeHtml(env.PARTNER_URL)}" style="color:#1f3d35">${escapeHtml(env.EMAIL_OPERATOR ?? 'HornandFin.com')}</a>` : escapeHtml(env.EMAIL_OPERATOR ?? env.BUSINESS_NAME)}<br>${escapeHtml(env.BUSINESS_ADDRESS)}
 </td></tr></table></td></tr></table></body></html>`;
 }
 

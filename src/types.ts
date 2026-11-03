@@ -7,6 +7,8 @@ export interface Env {
   FROM_EMAIL: string;
   CONTACT_EMAIL: string;
   BUSINESS_NAME: string;
+  /** Who the alert emails say runs the service. */
+  EMAIL_OPERATOR?: string;
   BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
   INTRO_FREE?: string;
