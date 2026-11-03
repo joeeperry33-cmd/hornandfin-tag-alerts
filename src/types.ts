@@ -7,8 +7,10 @@ export interface Env {
   FROM_EMAIL: string;
   CONTACT_EMAIL: string;
   BUSINESS_NAME: string;
-  /** Who the alert emails say runs the service. */
+  /** Who the site and alert emails say runs the service. */
   EMAIL_OPERATOR?: string;
+  /** City shown on the website's contact sections (no street address). */
+  PUBLIC_LOCATION?: string;
   BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
   INTRO_FREE?: string;

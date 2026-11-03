@@ -49,6 +49,11 @@ footer.site nav{display:flex;flex-wrap:wrap;gap:8px 20px}
 
 export const MARK_SVG = `<svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M5 1h16l4 4v24H1V5z" fill="#e8d49a"/><circle cx="13" cy="7" r="2.6" fill="#1f3d35"/><circle cx="13" cy="7" r="4.2" fill="none" stroke="#c9b16c" stroke-width="1.4"/><rect x="5" y="15" width="16" height="2.4" fill="#1f3d35"/><rect x="5" y="20" width="10" height="2.4" fill="#ff6a13"/></svg>`;
 
+/** Name the site and emails give as the operator (HornandFin.com). */
+export function operator(env: Env): string {
+  return env.EMAIL_OPERATOR ?? env.BUSINESS_NAME;
+}
+
 export function faviconSvg(): Response {
   return new Response(MARK_SVG.replace('aria-hidden="true"', 'xmlns="http://www.w3.org/2000/svg"'), {
     headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' },
@@ -78,7 +83,7 @@ ${FONTS}<style>${BASE_CSS}${opts.css ?? ''}</style></head><body>
 <header class="topbar"><div class="wrap"><a class="brand" href="/">${MARK_SVG}<span>Leftover Tag Alerts</span></a>
 ${opts.nav === false ? '' : `<nav aria-label="Main">${isIntro(env) ? '<a href="/#how">How it works</a>' : '<a href="/#plans">Plans</a>'}&nbsp;&nbsp;&nbsp;<a href="/#states">States</a>&nbsp;&nbsp;&nbsp;<a href="/#questions">Questions</a>&nbsp;&nbsp;&nbsp;<a href="/login" class="signin">Sign in</a></nav>`}</div></header>
 <main>${body}</main>
-<footer class="site"><div class="wrap"><div>© ${year} ${escapeHtml(env.BUSINESS_NAME)}. Not affiliated with any state wildlife agency.</div>
+<footer class="site"><div class="wrap"><div>© ${year} ${escapeHtml(operator(env))}. Not affiliated with any state wildlife agency.</div>
 <nav aria-label="Footer">${env.PARTNER_URL ? `<a href="${escapeHtml(env.PARTNER_URL)}">Horn &amp; Fin outfitters and guides</a>` : ''}<a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/bot">How we check state sites</a><a href="mailto:${escapeHtml(env.CONTACT_EMAIL)}">Contact</a></nav></div></footer>
 </body></html>`,
     { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': opts.noindex ? 'no-store' : 'public, max-age=300' } },
@@ -363,8 +368,8 @@ const PROSE_CSS = `.prose{max-width:760px;padding:48px 20px 72px;margin:0 auto}.
 
 export function privacyPage(env: Env): Response {
   return shell(env, { title: 'Privacy policy | Leftover Tag Alerts', path: '/privacy', css: PROSE_CSS }, `<article class="prose">
-<h1>Privacy policy</h1><p class="updated">Last updated October 25, 2026</p>
-<p>${escapeHtml(env.SITE_NAME)} is operated by ${escapeHtml(env.BUSINESS_NAME)} ("we"). This policy explains what we collect when you sign up for tag alerts and what we do with it.</p>
+<h1>Privacy policy</h1><p class="updated">Last updated November 2, 2026</p>
+<p>${escapeHtml(env.SITE_NAME)} is operated by ${escapeHtml(operator(env))} ("we"). This policy explains what we collect when you sign up for tag alerts and what we do with it.</p>
 <h2>What we collect</h2>
 <ul><li>Your email address, and the states and species you choose.</li>
 <li>If you subscribe to instant alerts: your mobile number (if you add one), the date you agreed to receive texts, and a customer ID from our payment processor. We never see or store your card number.</li>
@@ -380,14 +385,14 @@ export function privacyPage(env: Env): Response {
 <h2>Your choices</h2>
 <p>Every email has links to change your settings or unsubscribe. To delete your data or ask a question, email <a href="mailto:${escapeHtml(env.CONTACT_EMAIL)}">${escapeHtml(env.CONTACT_EMAIL)}</a>.</p>
 <h2>Contact</h2>
-<p>${escapeHtml(env.BUSINESS_NAME)}, ${escapeHtml(env.BUSINESS_ADDRESS)}</p>
+<p>${escapeHtml(operator(env))}, ${escapeHtml(env.PUBLIC_LOCATION ?? 'Auburn, CA')}</p>
 </article>`);
 }
 
 export function termsPage(env: Env): Response {
   return shell(env, { title: 'Terms of service | Leftover Tag Alerts', path: '/terms', css: PROSE_CSS }, `<article class="prose">
-<h1>Terms of service</h1><p class="updated">Last updated October 25, 2026</p>
-<p>These terms cover your use of ${escapeHtml(env.SITE_NAME)}, a service of ${escapeHtml(env.BUSINESS_NAME)}. By signing up you agree to them.</p>
+<h1>Terms of service</h1><p class="updated">Last updated November 2, 2026</p>
+<p>These terms cover your use of ${escapeHtml(env.SITE_NAME)}, a service of ${escapeHtml(operator(env))}. By signing up you agree to them.</p>
 <h2>What the service does</h2>
 <p>We watch public state wildlife agency web pages and send you an alert when a list of leftover, returned or reissued hunting tags changes. We are not a state agency, we do not sell or reserve tags, and we are not affiliated with any agency.</p>
 <h2>No guarantee of availability</h2>
@@ -401,7 +406,7 @@ ${isIntro(env) ? `<p>All alerts are free during our launch period. If we add pai
 <h2>Changes</h2>
 <p>We may update these terms. If we make a material change, we'll email active subscribers before it takes effect.</p>
 <h2>Contact</h2>
-<p><a href="mailto:${escapeHtml(env.CONTACT_EMAIL)}">${escapeHtml(env.CONTACT_EMAIL)}</a><br>${escapeHtml(env.BUSINESS_NAME)}, ${escapeHtml(env.BUSINESS_ADDRESS)}</p>
+<p><a href="mailto:${escapeHtml(env.CONTACT_EMAIL)}">${escapeHtml(env.CONTACT_EMAIL)}</a><br>${escapeHtml(operator(env))}, ${escapeHtml(env.PUBLIC_LOCATION ?? 'Auburn, CA')}</p>
 </article>`);
 }
 
