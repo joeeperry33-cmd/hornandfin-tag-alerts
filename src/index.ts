@@ -1,7 +1,7 @@
 import { runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
-import { loginPage, managePage, messagePage } from './pages';
+import { loginPage, managePage, messagePage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
 import { createCheckout, createPortal, handleStripeEvent, verifyStripeSignature, verifyTwilioSignature } from './stripe';
 import type { AlertEvent, Env, Source, Subscriber } from './types';
@@ -219,6 +219,13 @@ async function feed(env: Env, url: URL, req: Request): Promise<Response> {
   return json({ events: results, delay_hours: delayHours }, 200, { 'cache-control': 'public, max-age=300', 'access-control-allow-origin': '*' });
 }
 
+/** Signed-in owner (ADMIN_EMAILS) using the same sign-in link as subscribers. */
+function isOwner(env: Env, sub: Subscriber | null): boolean {
+  if (!sub || !sub.verified_at) return false;
+  const owners = (env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return owners.includes(sub.email.toLowerCase());
+}
+
 function isAdmin(env: Env, req: Request): boolean {
   const auth = req.headers.get('authorization') ?? '';
   return !!env.ADMIN_TOKEN && auth === `Bearer ${env.ADMIN_TOKEN}`;
@@ -268,6 +275,7 @@ export default {
         welcome: url.searchParams.has('welcome'),
         upgraded: url.searchParams.has('upgraded'),
         saved: url.searchParams.has('saved'),
+        owner: isOwner(env, sub),
       });
     }
 
@@ -291,6 +299,19 @@ export default {
       }
       await handleStripeEvent(env, JSON.parse(raw));
       return json({ received: true });
+    }
+
+    if (path === '/admin/subscribers' || path === '/admin/subscribers.csv') {
+      const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!me) return redirect('/login');
+      if (!isOwner(env, me)) return new Response('not found', { status: 404 });
+      const { results } = await env.DB.prepare(
+        `SELECT email, states, species, openings, weapons, sexes, home_state, phone, sms_consent_at, verified_at, unsubscribed_at, created_at
+         FROM subscribers ORDER BY created_at DESC`,
+      ).all<SubscriberRow>();
+      const res = path.endsWith('.csv') ? subscribersCsv(results) : subscribersPage(env, results);
+      res.headers.set('cache-control', 'no-store');
+      return res;
     }
 
     if (path.startsWith('/admin')) {

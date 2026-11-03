@@ -35,7 +35,7 @@ function checkboxes(name: string, options: [string, string][], selected: string)
     .join('');
 }
 
-export function managePage(env: Env, sub: Subscriber, flags: { welcome?: boolean; upgraded?: boolean; saved?: boolean }): Response {
+export function managePage(env: Env, sub: Subscriber, flags: { welcome?: boolean; upgraded?: boolean; saved?: boolean; owner?: boolean }): Response {
   const paid = sub.tier === 'paid';
   const notice = flags.upgraded
     ? '<div class="notice" role="status">Instant alerts are on. Add your cell number below to get texts.</div>'
@@ -69,7 +69,7 @@ ${phoneFields}
 <button type="button" class="btn" id="upgrade">Get instant email and text alerts for ${escapeHtml(env.PAID_PRICE_LABEL)}</button></div>`;
 
   const body = `<div class="app">${notice}
-<h1>Your alerts</h1><p class="muted">${escapeHtml(sub.email)} &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
+<h1>Your alerts</h1><p class="muted">${escapeHtml(sub.email)} ${flags.owner ? '&nbsp;|&nbsp; <a href="/admin/subscribers">Subscribers</a>' : ''} &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
 <form id="prefs" novalidate>
 ${plan}
 <div class="panel"><h2>Species</h2><div class="grid">${checkboxes('species', species, sub.species)}</div></div>
@@ -129,4 +129,79 @@ f.onsubmit=async e=>{e.preventDefault();err.textContent='';const email=f.email.v
  catch(x){err.textContent=x.message;btn.disabled=false;btn.textContent='Email me a sign-in link';}};
 </script>`;
   return shell(env, { title: 'Sign in | Leftover Tag Alerts', noindex: true, nav: false, css: APP_CSS }, body);
+}
+
+
+export interface SubscriberRow {
+  email: string;
+  states: string;
+  species: string;
+  openings: string | null;
+  weapons: string | null;
+  sexes: string | null;
+  home_state: string | null;
+  phone: string | null;
+  sms_consent_at: string | null;
+  verified_at: string | null;
+  unsubscribed_at: string | null;
+  created_at: string;
+}
+
+function statusOf(r: SubscriberRow): 'Active' | 'Unconfirmed' | 'Unsubscribed' {
+  return r.unsubscribed_at ? 'Unsubscribed' : r.verified_at ? 'Active' : 'Unconfirmed';
+}
+
+function listText(v: string | null | undefined, all = 'All'): string {
+  return !v || v === '*' ? all : v.split(',').join(', ');
+}
+
+function day(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Los_Angeles' }) : '';
+}
+
+/** Owner-only list of everyone who signed up. */
+export function subscribersPage(env: Env, rows: SubscriberRow[]): Response {
+  const count = (s: string) => rows.filter((r) => statusOf(r) === s).length;
+  const tr = rows
+    .map((r) => {
+      const st = statusOf(r);
+      const types = [r.openings, r.weapons, r.sexes].some((v) => v && v !== '*')
+        ? [listText(r.openings, ''), listText(r.weapons, ''), listText(r.sexes, '')].filter(Boolean).join(' · ')
+        : 'All';
+      return `<tr><td>${escapeHtml(r.email)}</td><td><span class="st st-${st.toLowerCase()}">${st}</span></td><td>${escapeHtml(listText(r.states))}</td><td>${escapeHtml(listText(r.species))}</td><td>${escapeHtml(types)}${r.home_state ? `<br><span class="muted">Home: ${escapeHtml(r.home_state)}</span>` : ''}</td><td>${r.phone && r.sms_consent_at ? 'Yes' : ''}</td><td>${day(r.created_at)}</td></tr>`;
+    })
+    .join('');
+  const css = `${APP_CSS}
+.app{max-width:1100px}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0 22px}
+.stat{background:var(--paper);border-top:3px solid var(--ink);padding:12px 16px;min-width:130px}
+.stat b{display:block;font:900 30px/1 var(--display)}
+.tbl{overflow-x:auto;background:var(--paper)}
+table.subs{border-collapse:collapse;width:100%;font-size:15px}
+table.subs th,table.subs td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.subs th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--moss)}
+.st{font-size:13px;font-weight:700;padding:2px 7px;border-radius:2px}
+.st-active{background:#dcefe2;color:#1d5c37}.st-unconfirmed{background:#f3ead2;color:#6b5312}.st-unsubscribed{background:#eee;color:#555}`;
+  const body = `<div class="app">
+<h1>Subscribers</h1><p class="muted"><a href="/manage">Your alerts</a> &nbsp;|&nbsp; <a href="/admin/subscribers.csv">Download CSV</a> &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
+<div class="stats"><div class="stat"><b>${count('Active')}</b>Active</div><div class="stat"><b>${count('Unconfirmed')}</b>Haven't confirmed</div><div class="stat"><b>${count('Unsubscribed')}</b>Unsubscribed</div><div class="stat"><b>${rows.filter((r) => r.phone && r.sms_consent_at && !r.unsubscribed_at).length}</b>Want texts</div></div>
+<div class="tbl"><table class="subs"><thead><tr><th>Email</th><th>Status</th><th>States</th><th>Species</th><th>Tag types</th><th>Texts</th><th>Signed up</th></tr></thead>
+<tbody>${tr || '<tr><td colspan="7">No sign-ups yet.</td></tr>'}</tbody></table></div>
+<p class="muted" style="margin-top:14px;font-size:14px">Only you can see this page. Subscriber emails are private: don't share or sell them.</p></div>`;
+  return shell(env, { title: 'Subscribers | Leftover Tag Alerts', noindex: true, nav: false, css }, body);
+}
+
+export function subscribersCsv(rows: SubscriberRow[]): Response {
+  const q = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const lines = [['email', 'status', 'states', 'species', 'openings', 'weapons', 'antlered_antlerless', 'home_state', 'texts', 'signed_up', 'confirmed'].join(',')];
+  for (const r of rows) {
+    lines.push(
+      [r.email, statusOf(r), listText(r.states), listText(r.species), listText(r.openings), listText(r.weapons), listText(r.sexes), r.home_state ?? '', r.phone && r.sms_consent_at ? 'yes' : '', r.created_at, r.verified_at ?? '']
+        .map((v) => q(String(v)))
+        .join(','),
+    );
+  }
+  return new Response(lines.join('\n'), {
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="subscribers.csv"', 'cache-control': 'no-store' },
+  });
 }

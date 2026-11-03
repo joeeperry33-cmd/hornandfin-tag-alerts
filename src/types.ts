@@ -11,6 +11,8 @@ export interface Env {
   EMAIL_OPERATOR?: string;
   /** City shown on the website's contact sections (no street address). */
   PUBLIC_LOCATION?: string;
+  /** Comma-separated emails that can open /admin/subscribers after signing in. */
+  ADMIN_EMAILS?: string;
   BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
   INTRO_FREE?: string;
