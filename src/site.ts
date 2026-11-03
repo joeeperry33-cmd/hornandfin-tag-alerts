@@ -379,7 +379,7 @@ export function privacyPage(env: Env): Response {
 <h2>Text messages</h2>
 <p>We send text messages only to instant subscribers who enter a mobile number and check the consent box. Messages are recurring automated tag alerts; frequency varies with how often states post tags. Message and data rates may apply. Reply STOP to stop texts and HELP for help. <strong>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes.</strong> Text messaging opt-in data and consent are not shared with any third parties.</p>
 <h2>Services we use</h2>
-<p>We use these companies to run the service, and they handle your data only for that purpose: Cloudflare (hosting and database), Resend (email delivery), Twilio (text messages) and Stripe (payments).</p>
+<p>We use these companies to run the service, and they handle your data only for that purpose: Cloudflare (hosting and database), Resend (email delivery), Twilio (text messages) and PayPal (payments). We never see or store your card or bank details; PayPal handles them.</p>
 <h2>How long we keep it</h2>
 <p>We keep your information while you're subscribed. If you unsubscribe, we stop all messages right away and delete your account data on request.</p>
 <h2>Your choices</h2>
@@ -398,7 +398,7 @@ export function termsPage(env: Env): Response {
 <h2>No guarantee of availability</h2>
 <p>States change their pages, post late, or sell out before an alert reaches you. Alerts may be delayed, incomplete or wrong. Always confirm availability, eligibility, point rules and season dates on the state's site before you buy a tag or make travel plans. We are not responsible for tags you could not get or costs you incur.</p>
 <h2>Price</h2>
-${isIntro(env) ? `<p>All alerts are free during our launch period. If we add paid plans later, we'll email current subscribers before anything changes, and you won't be charged unless you choose a paid plan.</p>` : `<p>Instant alerts cost ${escapeHtml(env.PAID_PRICE_LABEL)}, billed monthly through Stripe until you cancel. Cancel any time from the billing link in your settings page; you keep instant alerts until the end of the period you paid for. We don't give partial-month refunds.</p>`}
+${isIntro(env) ? `<p>All alerts are free during our launch period. If we add paid plans later, we'll email current subscribers before anything changes, and you won't be charged unless you choose a paid plan.</p>` : `<p>Instant alerts cost ${escapeHtml(env.PAID_PRICE_LABEL)}, billed monthly through PayPal until you cancel. Cancel any time from your settings page or your PayPal account; you keep instant alerts until the end of the month you paid for. Unsubscribing from all emails also cancels your PayPal subscription. We don't give partial-month refunds. If we change the price, it applies to new sign-ups; we'll email you before any change to your own plan.</p>`}
 <h2>Text messages</h2>
 <p>If you add a mobile number and agree to texts, you'll receive recurring automated tag alerts. Message frequency varies. Message and data rates may apply. Reply STOP to cancel or HELP for help. Carriers are not liable for delayed or undelivered messages.</p>
 <h2>Fair use</h2>

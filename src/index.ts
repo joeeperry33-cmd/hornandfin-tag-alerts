@@ -1,9 +1,23 @@
 import { runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
-import { loginPage, managePage, messagePage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
+import { loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
-import { createCheckout, createPortal, handleStripeEvent, verifyStripeSignature, verifyTwilioSignature } from './stripe';
+import { verifyTwilioSignature } from './twilio';
+import {
+  cancelSubscription,
+  confirmApproval,
+  connectWebhook,
+  createPlan,
+  expirePaidPlans,
+  handlePaypalEvent,
+  loadPaypalSettings,
+  paymentsReady,
+  paypalEnv,
+  paypalKeysSet,
+  priceLabel,
+  verifyWebhook,
+} from './paypal';
 import type { AlertEvent, Env, Source, Subscriber } from './types';
 import { isIntro, json, normalizeEmail, normalizeUsPhone, nowIso, parseList, randomToken, SPECIES, STATES, textsEnabled } from './util';
 import { widgetJs } from './widget';
@@ -149,8 +163,17 @@ async function verify(env: Env, url: URL): Promise<Response> {
 async function unsubscribe(env: Env, url: URL, req: Request): Promise<Response> {
   const sub = await byManageToken(env, url.searchParams.get('token'));
   if (sub) await env.DB.prepare('UPDATE subscribers SET unsubscribed_at = ? WHERE id = ?').bind(nowIso(), sub.id).run();
+  // Unsubscribing from everything also stops PayPal billing, so nobody pays for alerts they turned off.
+  let note = '';
+  if (sub?.paypal_sub && sub.tier === 'paid' && !sub.paid_until) {
+    try {
+      await cancelSubscription(env, sub, 'Unsubscribed from all Leftover Tag Alerts emails');
+      note = ' Your PayPal subscription has been canceled too.';
+    } catch {
+      note = ` We couldn't cancel your PayPal subscription automatically. Cancel it in your PayPal account, or email ${env.CONTACT_EMAIL}.`;
+    }
+  }
   if (req.method === 'POST') return new Response(null, { status: 204 }); // one-click from mail clients
-  const note = sub?.tier === 'paid' ? ' Your paid plan is still active; use Manage billing on your alerts page to cancel it.' : '';
   return messagePage(env, 'Unsubscribed', `You won't get any more tag alerts.${note}`);
 }
 
@@ -226,13 +249,34 @@ function isOwner(env: Env, sub: Subscriber | null): boolean {
   return owners.includes(sub.email.toLowerCase());
 }
 
+/** Current price and whether paid plans are switched on, from the PayPal settings saved in D1. */
+async function withPricing(env: Env): Promise<Env> {
+  try {
+    const s = await loadPaypalSettings(env);
+    return { ...env, PAID_PRICE_LABEL: priceLabel(s.price, env.PAID_PRICE_LABEL), PAYMENTS_READY: !isIntro(env) && paymentsReady(env, s), PAYPAL_PLAN_ID: s.plan_id };
+  } catch {
+    return { ...env, PAYMENTS_READY: false };
+  }
+}
+
+/** Owner form posts must come from this site (the session cookie is SameSite=Lax; this is a second check). */
+function sameOrigin(env: Env, req: Request): boolean {
+  const origin = req.headers.get('origin');
+  try {
+    return !!origin && new URL(origin).host === new URL(env.SITE_URL).host;
+  } catch {
+    return false;
+  }
+}
+
 function isAdmin(env: Env, req: Request): boolean {
   const auth = req.headers.get('authorization') ?? '';
   return !!env.ADMIN_TOKEN && auth === `Bearer ${env.ADMIN_TOKEN}`;
 }
 
 export default {
-  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(req: Request, rawEnv: Env, ctx: ExecutionContext): Promise<Response> {
+    const env = await withPricing(rawEnv);
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     if (url.hostname.startsWith('www.')) {
@@ -276,29 +320,72 @@ export default {
         upgraded: url.searchParams.has('upgraded'),
         saved: url.searchParams.has('saved'),
         owner: isOwner(env, sub),
+        paypal: env.PAYMENTS_READY && env.PAYPAL_CLIENT_ID && env.PAYPAL_PLAN_ID ? { clientId: env.PAYPAL_CLIENT_ID, planId: env.PAYPAL_PLAN_ID } : undefined,
       });
     }
 
-    if ((path === '/api/checkout' || path === '/api/billing') && req.method === 'POST') {
+    if ((path === '/api/paypal/approved' || path === '/api/paypal/cancel') && req.method === 'POST') {
       const b = await body(req);
       const sub = await byManageToken(env, b.token);
       if (!sub) return json({ error: 'This link has expired.' }, 401);
-      if (path === '/api/checkout' && isIntro(env)) return json({ error: 'Instant alerts are free during launch. You already have them.' }, 400);
       try {
-        const target = path === '/api/checkout' ? await createCheckout(env, sub) : await createPortal(env, sub);
-        return json({ url: target });
+        if (path === '/api/paypal/approved') {
+          if (!env.PAYMENTS_READY) return json({ error: 'Paid plans are not open yet.' }, 400);
+          await confirmApproval(env, sub, String(b.subscriptionID ?? ''));
+          return json({ ok: true });
+        }
+        const until = await cancelSubscription(env, sub);
+        return json({ ok: true, paidUntil: until });
       } catch (err) {
-        return json({ error: err instanceof Error ? err.message : 'Billing is unavailable right now.' }, 503);
+        return json({ error: err instanceof Error ? err.message : 'PayPal is unavailable right now. Try again in a few minutes.' }, 503);
       }
     }
 
-    if (path === '/api/stripe/webhook' && req.method === 'POST') {
+    if (path === '/api/paypal/webhook' && req.method === 'POST') {
       const raw = await req.text();
-      if (!env.STRIPE_WEBHOOK_SECRET || !(await verifyStripeSignature(raw, req.headers.get('stripe-signature'), env.STRIPE_WEBHOOK_SECRET))) {
+      if (!paypalKeysSet(env) || !(await verifyWebhook(env, req.headers, raw).catch(() => false))) {
         return new Response('bad signature', { status: 400 });
       }
-      await handleStripeEvent(env, JSON.parse(raw));
+      await handlePaypalEvent(env, JSON.parse(raw));
       return json({ received: true });
+    }
+
+    if (path.startsWith('/admin/paypal')) {
+      const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!me) return redirect('/login');
+      if (!isOwner(env, me)) return new Response('not found', { status: 404 });
+      let notice = '';
+      let error = '';
+      if (req.method === 'POST') {
+        if (!sameOrigin(env, req)) return new Response('forbidden', { status: 403 });
+        const form = await req.formData();
+        try {
+          if (path === '/admin/paypal/plan') {
+            const s = await createPlan(env, String(form.get('price') ?? '').trim());
+            notice = `New plan created at $${s.price}/month. New sign-ups pay this price; current subscribers keep theirs.`;
+          } else if (path === '/admin/paypal/webhook') {
+            await connectWebhook(env);
+            notice = 'PayPal is connected to this site.';
+          }
+        } catch (err) {
+          error = err instanceof Error ? err.message : String(err);
+        }
+      }
+      const s = await loadPaypalSettings(env);
+      const counts = await env.DB.prepare(
+        `SELECT COUNT(*) AS n, SUM(paid_until IS NOT NULL) AS canceling FROM subscribers WHERE tier = 'paid' AND unsubscribed_at IS NULL`,
+      ).first<{ n: number; canceling: number | null }>();
+      return paypalAdminPage(env, {
+        mode: paypalEnv(env),
+        keys: paypalKeysSet(env),
+        settings: s,
+        intro: isIntro(env),
+        ready: paymentsReady(env, s),
+        paid: counts?.n ?? 0,
+        canceling: counts?.canceling ?? 0,
+        notice,
+        error,
+      });
     }
 
     if (path === '/admin/subscribers' || path === '/admin/subscribers.csv') {
@@ -348,9 +435,15 @@ export default {
     return new Response(notFound.body, { status: 404, headers: notFound.headers });
   },
 
-  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledController, rawEnv: Env, ctx: ExecutionContext): Promise<void> {
+    const env = await withPricing(rawEnv);
     if (event.cron === '30 14 * * *') {
-      ctx.waitUntil(sendDigests(env).then((n) => console.log(`digests sent: ${n}`)));
+      ctx.waitUntil(
+        expirePaidPlans(env)
+          .then((n) => n && console.log(`paid plans ended: ${n}`))
+          .then(() => sendDigests(env))
+          .then((n) => console.log(`digests sent: ${n}`)),
+      );
       return;
     }
     const result = await runChecks(env);

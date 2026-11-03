@@ -8,7 +8,8 @@ import { extractTables, listingsFromTable, parseCsv, parseTable } from '../src/p
 import { isAllowed, parseRobots } from '../src/robots';
 import { personalize, smsBody } from '../src/notify';
 import type { EventItem } from '../src/types';
-import { verifyStripeSignature } from '../src/stripe';
+import { handlePaypalEvent, paymentsReady, priceLabel } from '../src/paypal';
+import { verifyTwilioSignature } from '../src/twilio';
 import type { AlertEvent, Source, Subscriber } from '../src/types';
 import { inSeason, matchesList, normalizeEmail, normalizeUsPhone, parseList, STATES } from '../src/util';
 
@@ -207,20 +208,39 @@ describe('subscriber matching and messages', () => {
   });
 });
 
-describe('stripe webhook signature', () => {
-  async function sign(secret: string, t: number, payload: string) {
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${payload}`));
-    return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
-  }
-  it('accepts a valid signature and rejects tampering or old timestamps', async () => {
-    const t = 1_800_000_000;
-    const payload = '{"type":"checkout.session.completed"}';
-    const v1 = await sign('whsec_test', t, payload);
-    expect(await verifyStripeSignature(payload, `t=${t},v1=${v1}`, 'whsec_test', t + 10)).toBe(true);
-    expect(await verifyStripeSignature(payload + ' ', `t=${t},v1=${v1}`, 'whsec_test', t + 10)).toBe(false);
-    expect(await verifyStripeSignature(payload, `t=${t},v1=${v1}`, 'whsec_test', t + 1000)).toBe(false);
-    expect(await verifyStripeSignature(payload, null, 'whsec_test', t)).toBe(false);
+describe('PayPal plans', () => {
+  it('shows the saved plan price, falling back to the configured label', () => {
+    expect(priceLabel('3.99', '$4.99/month')).toBe('$3.99/month');
+    expect(priceLabel(undefined, '$3.99/month')).toBe('$3.99/month');
+  });
+  it('opens paid plans only when keys, plan and webhook are all set', () => {
+    const env = { PAYPAL_CLIENT_ID: 'id', PAYPAL_SECRET: 'secret' } as never;
+    expect(paymentsReady(env, { plan_id: 'P-1', webhook_id: 'W-1' })).toBe(true);
+    expect(paymentsReady(env, { plan_id: 'P-1' })).toBe(false);
+    expect(paymentsReady({} as never, { plan_id: 'P-1', webhook_id: 'W-1' })).toBe(false);
+  });
+  it('keeps instant alerts through the paid month when PayPal reports a cancellation', async () => {
+    const calls: { sql: string; args: unknown[] }[] = [];
+    const DB = { prepare: (sql: string) => ({ bind: (...args: unknown[]) => ({ run: async () => { calls.push({ sql, args }); return { meta: { changes: 1 } }; } }) }) };
+    const next = new Date(Date.now() + 10 * 86400_000).toISOString();
+    await handlePaypalEvent({ DB } as never, { event_type: 'BILLING.SUBSCRIPTION.CANCELLED', resource: { id: 'I-ABC123', billing_info: { next_billing_time: next } } });
+    expect(calls[0].sql).toContain('paid_until');
+    expect(calls[0].args).toEqual([next, next, 'I-ABC123']);
+    await handlePaypalEvent({ DB } as never, { event_type: 'BILLING.SUBSCRIPTION.ACTIVATED', resource: { id: 'I-ABC123', custom_id: 'sub1' } });
+    expect(calls[1].sql).toContain("tier = 'paid'");
+    expect(calls[1].args).toEqual(['I-ABC123', 'sub1']);
+  });
+});
+
+describe('twilio signature', () => {
+  it('accepts its own signature and rejects tampering', async () => {
+    const url = 'https://leftovertagalerts.com/api/sms/inbound';
+    const params = new URLSearchParams({ From: '+15305550123', Body: 'STOP' });
+    const data = url + 'BodySTOPFrom+15305550123';
+    const k = await crypto.subtle.importKey('raw', new TextEncoder().encode('tok'), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+    const sig = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(data)))));
+    expect(await verifyTwilioSignature(url, params, sig, 'tok')).toBe(true);
+    expect(await verifyTwilioSignature(url, new URLSearchParams({ From: '+15305550123', Body: 'START' }), sig, 'tok')).toBe(false);
   });
 });
 

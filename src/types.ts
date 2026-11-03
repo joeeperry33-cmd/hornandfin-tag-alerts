@@ -22,9 +22,14 @@ export interface Env {
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
   TWILIO_FROM_NUMBER?: string;
-  STRIPE_SECRET_KEY?: string;
-  STRIPE_PRICE_ID?: string;
-  STRIPE_WEBHOOK_SECRET?: string;
+  /** PayPal REST app for the Horn & Fin PayPal Business account (secrets). */
+  PAYPAL_CLIENT_ID?: string;
+  PAYPAL_SECRET?: string;
+  /** "sandbox" while testing, "live" to take real payments. */
+  PAYPAL_ENV?: string;
+  /** Filled per request from the settings table (not Worker vars). */
+  PAYMENTS_READY?: boolean;
+  PAYPAL_PLAN_ID?: string;
   ADMIN_TOKEN?: string;
 }
 
@@ -67,6 +72,9 @@ export interface Subscriber {
   manage_token: string;
   stripe_customer: string | null;
   stripe_sub: string | null;
+  paypal_sub?: string | null;
+  /** Set when a paid plan is canceled: instant alerts continue until this time. */
+  paid_until?: string | null;
   sms_stopped: number;
   unsubscribed_at: string | null;
   created_at: string;

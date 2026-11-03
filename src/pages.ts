@@ -35,7 +35,15 @@ function checkboxes(name: string, options: [string, string][], selected: string)
     .join('');
 }
 
-export function managePage(env: Env, sub: Subscriber, flags: { welcome?: boolean; upgraded?: boolean; saved?: boolean; owner?: boolean }): Response {
+function longDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Denver' });
+}
+
+export function managePage(
+  env: Env,
+  sub: Subscriber,
+  flags: { welcome?: boolean; upgraded?: boolean; saved?: boolean; owner?: boolean; paypal?: { clientId: string; planId: string } },
+): Response {
   const paid = sub.tier === 'paid';
   const notice = flags.upgraded
     ? '<div class="notice" role="status">Instant alerts are on. Add your cell number below to get texts.</div>'
@@ -60,13 +68,24 @@ export function managePage(env: Env, sub: Subscriber, flags: { welcome?: boolean
 <p class="muted">You get an email within about 15 minutes of a tag list changing in the states you pick.</p>
 ${phoneFields}</div>`
     : paid
-    ? `<div class="panel"><h2>Instant alerts<span class="pill">On</span></h2>
+    ? `<div class="panel"><h2>Instant alerts<span class="pill">${sub.paid_until ? 'Canceled' : 'On'}</span></h2>
 <p class="muted">You get an email${textsEnabled(env) ? ', and a text if you add a number,' : ''} within about 15 minutes of a tag list changing.</p>
 ${phoneFields}
-<p style="margin-top:16px"><button type="button" class="btn quiet" id="billing">Manage billing or cancel</button></p></div>`
-    : `<div class="panel"><h2>Free daily email</h2>
+${
+  sub.paid_until
+    ? `<p style="margin-top:16px">Your PayPal subscription is canceled. Instant alerts continue through <strong>${escapeHtml(longDate(sub.paid_until))}</strong>, then you'll get the free daily email.</p>`
+    : sub.paypal_sub
+      ? `<p style="margin-top:16px" class="muted">Billed monthly through PayPal. You can also cancel in your PayPal account.</p>
+<p><button type="button" class="btn quiet" id="cancelPlan">Cancel instant alerts</button></p>`
+      : ''
+}</div>`
+    : flags.paypal
+    ? `<div class="panel"><h2>Free daily email</h2>
 <p class="muted">One email each morning with everything that opened up in the last day. Leftover and returned tags often sell out within hours.</p>
-<button type="button" class="btn" id="upgrade">Get instant email and text alerts for ${escapeHtml(env.PAID_PRICE_LABEL)}</button></div>`;
+<p><strong>Get instant email${textsEnabled(env) ? ' and text' : ''} alerts for ${escapeHtml(env.PAID_PRICE_LABEL)}.</strong> Billed monthly through PayPal. Cancel any time.</p>
+<div id="paypal-button" style="max-width:340px;margin-top:10px"></div></div>`
+    : `<div class="panel"><h2>Free daily email</h2>
+<p class="muted">One email each morning with everything that opened up in the last day. Instant alerts by email and text are coming soon.</p></div>`;
 
   const body = `<div class="app">${notice}
 <h1>Your alerts</h1><p class="muted">${escapeHtml(sub.email)} ${flags.owner ? '&nbsp;|&nbsp; <a href="/admin/subscribers">Subscribers</a>' : ''} &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
@@ -104,8 +123,21 @@ form.onsubmit=async e=>{e.preventDefault();errBox.textContent='';
  if(!vals('openings').length||!vals('weapons').length||!vals('sexes').length){errBox.textContent='Pick at least one option under each tag type.';return;}
  const phone=form.querySelector('[name=phone]');const consent=form.querySelector('[name=sms_consent]');
  try{await post('/api/manage',{states:vals('states'),species:vals('species'),openings:vals('openings'),weapons:vals('weapons'),sexes:vals('sexes'),home_state:form.querySelector('[name=home_state]').value,page_alerts:form.querySelector('[name=page_alerts]').checked,phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
-const up=document.getElementById('upgrade');if(up)up.onclick=async()=>{try{const d=await post('/api/checkout',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
-const bill=document.getElementById('billing');if(bill)bill.onclick=async()=>{try{const d=await post('/api/billing',{});location.href=d.url;}catch(err){errBox.textContent=err.message;}};
+const cancelBtn=document.getElementById('cancelPlan');if(cancelBtn){let armed=false;cancelBtn.onclick=async()=>{
+ if(!armed){armed=true;cancelBtn.textContent='Tap again to cancel your PayPal subscription';return;}
+ cancelBtn.disabled=true;try{await post('/api/paypal/cancel',{});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;cancelBtn.disabled=false;}};}
+${
+  flags.paypal && !paid
+    ? `(function(){const s=document.createElement('script');
+s.src='https://www.paypal.com/sdk/js?client-id='+encodeURIComponent(${JSON.stringify(flags.paypal.clientId)})+'&vault=true&intent=subscription&currency=USD';
+s.onload=()=>paypal.Buttons({style:{label:'subscribe',shape:'rect',color:'gold'},
+ createSubscription:(data,actions)=>actions.subscription.create({plan_id:${JSON.stringify(flags.paypal.planId)},custom_id:${JSON.stringify(sub.id)}}),
+ onApprove:async(data)=>{try{await post('/api/paypal/approved',{subscriptionID:data.subscriptionID});location.href='/manage?upgraded=1';}catch(err){errBox.textContent=err.message+' If PayPal shows the subscription as active, refresh in a minute.';}},
+ onError:()=>{errBox.textContent='PayPal could not start the subscription. Try again.';}}).render('#paypal-button');
+s.onerror=()=>{errBox.textContent='PayPal did not load. Check your connection and refresh.';};
+document.head.appendChild(s);})();`
+    : ''
+}
 </script>`;
   return shell(env, { title: 'Your alerts | Leftover Tag Alerts', noindex: true, nav: false, css: APP_CSS }, body);
 }
@@ -183,7 +215,7 @@ table.subs th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color
 .st{font-size:13px;font-weight:700;padding:2px 7px;border-radius:2px}
 .st-active{background:#dcefe2;color:#1d5c37}.st-unconfirmed{background:#f3ead2;color:#6b5312}.st-unsubscribed{background:#eee;color:#555}`;
   const body = `<div class="app">
-<h1>Subscribers</h1><p class="muted"><a href="/manage">Your alerts</a> &nbsp;|&nbsp; <a href="/admin/subscribers.csv">Download CSV</a> &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
+<h1>Subscribers</h1><p class="muted"><a href="/manage">Your alerts</a> &nbsp;|&nbsp; <a href="/admin/subscribers.csv">Download CSV</a> &nbsp;|&nbsp; <a href="/admin/paypal">PayPal</a> &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
 <div class="stats"><div class="stat"><b>${count('Active')}</b>Active</div><div class="stat"><b>${count('Unconfirmed')}</b>Haven't confirmed</div><div class="stat"><b>${count('Unsubscribed')}</b>Unsubscribed</div><div class="stat"><b>${rows.filter((r) => r.phone && r.sms_consent_at && !r.unsubscribed_at).length}</b>Want texts</div></div>
 <div class="tbl"><table class="subs"><thead><tr><th>Email</th><th>Status</th><th>States</th><th>Species</th><th>Tag types</th><th>Texts</th><th>Signed up</th></tr></thead>
 <tbody>${tr || '<tr><td colspan="7">No sign-ups yet.</td></tr>'}</tbody></table></div>
@@ -204,4 +236,54 @@ export function subscribersCsv(rows: SubscriberRow[]): Response {
   return new Response(lines.join('\n'), {
     headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="subscribers.csv"', 'cache-control': 'no-store' },
   });
+}
+
+
+/** Owner-only PayPal setup: which account mode, keys present, plan/price, webhook, and paid counts. */
+export function paypalAdminPage(
+  env: Env,
+  v: {
+    mode: 'sandbox' | 'live';
+    keys: boolean;
+    settings: { product_id?: string; plan_id?: string; price?: string; webhook_id?: string };
+    intro: boolean;
+    ready: boolean;
+    paid: number;
+    canceling: number;
+    notice: string;
+    error: string;
+  },
+): Response {
+  const step = (done: boolean, text: string) => `<li class="${done ? 'done' : ''}">${done ? '✓' : '○'} ${text}</li>`;
+  const live = v.mode === 'live';
+  const css = `${APP_CSS}
+.steps{list-style:none;padding:0;margin:8px 0 0}.steps li{padding:6px 0;font-size:16px;color:var(--moss)}.steps li.done{color:#1d5c37;font-weight:600}
+.mode{display:inline-block;font:700 13px/1 var(--body);padding:5px 9px;border-radius:2px;background:${live ? '#dcefe2' : '#f3ead2'};color:${live ? '#1d5c37' : '#6b5312'}}
+input[type=text]{padding:11px;border:1.5px solid var(--line);border-radius:3px;font:17px var(--body);width:120px}
+code{font-size:14px;background:#eef1ec;padding:1px 5px;border-radius:2px}`;
+  const body = `<div class="app">
+<h1>PayPal</h1><p class="muted"><a href="/admin/subscribers">Subscribers</a> &nbsp;|&nbsp; <a href="/manage">Your alerts</a></p>
+${v.notice ? `<div class="notice" role="status">${escapeHtml(v.notice)}</div>` : ''}${v.error ? `<div class="err" role="alert" style="margin-bottom:16px">${escapeHtml(v.error)}</div>` : ''}
+<div class="panel"><h2>Status</h2>
+<p>Account mode: <span class="mode">${live ? 'Live (real payments)' : 'Sandbox (test payments)'}</span></p>
+<ul class="steps">
+${step(v.keys, `PayPal keys added in Cloudflare (<code>PAYPAL_CLIENT_ID</code>, <code>PAYPAL_SECRET</code>)`)}
+${step(!!v.settings.plan_id, v.settings.plan_id ? `Monthly plan: <strong>$${escapeHtml(v.settings.price ?? '')}/month</strong> <code>${escapeHtml(v.settings.plan_id)}</code>` : 'Monthly plan created')}
+${step(!!v.settings.webhook_id, 'PayPal connected to this site (payment and cancel notices)')}
+${step(!v.intro, v.intro ? 'Free launch period is still on, so no one is offered a paid plan yet' : 'Free launch period is over')}
+</ul>
+<p style="margin-top:10px"><strong>${v.ready && !v.intro ? 'Paid plans are open to subscribers.' : 'Paid plans are switched off.'}</strong> ${v.paid} paying subscriber${v.paid === 1 ? '' : 's'}${v.canceling ? `, ${v.canceling} canceled and finishing their paid month` : ''}.</p></div>
+
+<div class="panel"><h2>${v.settings.plan_id ? 'Change the price' : 'Create the monthly plan'}</h2>
+<p class="muted">${v.settings.plan_id ? 'This makes a new plan for new sign-ups. People already subscribed keep the price they signed up at.' : 'Creates the Leftover Tag Alerts product and a monthly plan in the Horn &amp; Fin PayPal account.'}</p>
+<form method="post" action="/admin/paypal/plan" class="row"><label>$ <input type="text" name="price" inputmode="decimal" value="${escapeHtml(v.settings.price ?? '3.99')}" pattern="\\d{1,3}\\.\\d{2}" required></label> / month
+<button class="btn" ${v.keys ? '' : 'disabled'}>${v.settings.plan_id ? 'Create new price' : 'Create plan'}</button></form></div>
+
+<div class="panel"><h2>Connect PayPal to this site</h2>
+<p class="muted">Registers <code>${escapeHtml(env.API_URL)}/api/paypal/webhook</code> with PayPal so the site hears about payments, renewals and cancellations. Safe to run again.</p>
+<form method="post" action="/admin/paypal/webhook"><button class="btn quiet" ${v.keys ? '' : 'disabled'}>${v.settings.webhook_id ? 'Reconnect' : 'Connect'}</button></form></div>
+
+<p class="muted" style="font-size:14px">Going live: add the Live keys in Cloudflare, set <code>PAYPAL_ENV = "live"</code>, then create the plan and connect again here (sandbox and live keep separate plans). Paid plans open when <code>INTRO_FREE</code> is turned off.</p>
+</div>`;
+  return shell(env, { title: 'PayPal | Leftover Tag Alerts', noindex: true, nav: false, css }, body);
 }
