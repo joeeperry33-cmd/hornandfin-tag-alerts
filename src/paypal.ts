@@ -38,7 +38,8 @@ export function paypalKeysSet(env: Env): boolean {
 export interface PaypalSettings {
   product_id?: string;
   plan_id?: string;
-  price?: string; // "3.99"
+  price?: string; // "19.99"
+  interval?: string; // "year" | "month"
   webhook_id?: string;
 }
 
@@ -61,8 +62,14 @@ export function paymentsReady(env: Env, s: PaypalSettings): boolean {
   return paypalKeysSet(env) && !!s.plan_id && !!s.webhook_id;
 }
 
-export function priceLabel(price: string | undefined, fallback: string): string {
-  return price ? `$${price}/month` : fallback;
+export type Interval = 'year' | 'month';
+
+export function asInterval(v: string | undefined): Interval {
+  return v === 'month' ? 'month' : 'year';
+}
+
+export function priceLabel(price: string | undefined, interval: string | undefined, fallback: string): string {
+  return price ? `$${price}/${asInterval(interval)}` : fallback;
 }
 
 // ---- API ----
@@ -101,8 +108,9 @@ async function api<T>(env: Env, method: string, path: string, body?: unknown): P
   return data;
 }
 
-/** Create (once) the product, then a monthly plan at this price. New sign-ups use the newest plan. */
-export async function createPlan(env: Env, price: string): Promise<PaypalSettings> {
+/** Create (once) the product, then a yearly (or monthly) plan at this price. New sign-ups use the newest plan. */
+export async function createPlan(env: Env, price: string, intervalIn: string = 'year'): Promise<PaypalSettings> {
+  const interval = asInterval(intervalIn);
   if (!/^\d{1,3}\.\d{2}$/.test(price) || Number(price) < 0.5) throw new Error('Enter a price like 3.99');
   const s = await loadPaypalSettings(env);
   let productId = s.product_id;
@@ -118,12 +126,12 @@ export async function createPlan(env: Env, price: string): Promise<PaypalSetting
   }
   const plan = await api<{ id: string }>(env, 'POST', '/v1/billing/plans', {
     product_id: productId,
-    name: `Instant alerts $${price}/month`,
+    name: `Instant alerts $${price}/${interval}`,
     description: 'Instant leftover and returned tag alerts by email and text',
     status: 'ACTIVE',
     billing_cycles: [
       {
-        frequency: { interval_unit: 'MONTH', interval_count: 1 },
+        frequency: { interval_unit: interval === 'year' ? 'YEAR' : 'MONTH', interval_count: 1 },
         tenure_type: 'REGULAR',
         sequence: 1,
         total_cycles: 0,
@@ -134,6 +142,7 @@ export async function createPlan(env: Env, price: string): Promise<PaypalSetting
   });
   await saveSetting(env, 'plan_id', plan.id);
   await saveSetting(env, 'price', price);
+  await saveSetting(env, 'interval', interval);
   return loadPaypalSettings(env);
 }
 

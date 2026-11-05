@@ -210,8 +210,9 @@ describe('subscriber matching and messages', () => {
 
 describe('PayPal plans', () => {
   it('shows the saved plan price, falling back to the configured label', () => {
-    expect(priceLabel('3.99', '$4.99/month')).toBe('$3.99/month');
-    expect(priceLabel(undefined, '$3.99/month')).toBe('$3.99/month');
+    expect(priceLabel('19.99', 'year', '$4.99/month')).toBe('$19.99/year');
+    expect(priceLabel('3.99', 'month', '$19.99/year')).toBe('$3.99/month');
+    expect(priceLabel(undefined, undefined, '$19.99/year')).toBe('$19.99/year');
   });
   it('opens paid plans only when keys, plan and webhook are all set', () => {
     const env = { PAYPAL_CLIENT_ID: 'id', PAYPAL_SECRET: 'secret' } as never;

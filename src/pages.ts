@@ -48,7 +48,7 @@ export function managePage(
   const notice = flags.upgraded
     ? '<div class="notice" role="status">Instant alerts are on. Add your cell number below to get texts.</div>'
     : flags.welcome
-      ? '<div class="notice" role="status">Your email is confirmed. Pick the states and species you care about.</div>'
+      ? (isIntro(env) || paid ? '<div class="notice" role="status">Your email is confirmed. Pick the states and species you care about.</div>' : '<div class="notice" role="status">Your email is confirmed. Pick your states and species, then subscribe below to start alerts.</div>')
       : flags.saved
         ? '<div class="notice" role="status">Saved.</div>'
         : '';
@@ -73,19 +73,19 @@ ${phoneFields}</div>`
 ${phoneFields}
 ${
   sub.paid_until
-    ? `<p style="margin-top:16px">Your PayPal subscription is canceled. Instant alerts continue through <strong>${escapeHtml(longDate(sub.paid_until))}</strong>, then you'll get the free daily email.</p>`
+    ? `<p style="margin-top:16px">Your PayPal subscription is canceled. Instant alerts continue through <strong>${escapeHtml(longDate(sub.paid_until))}</strong>, then alerts stop unless you subscribe again.</p>`
     : sub.paypal_sub
-      ? `<p style="margin-top:16px" class="muted">Billed monthly through PayPal. You can also cancel in your PayPal account.</p>
+      ? `<p style="margin-top:16px" class="muted">Billed ${env.PAID_INTERVAL === 'month' ? 'monthly' : 'yearly'} through PayPal. You can also cancel in your PayPal account.</p>
 <p><button type="button" class="btn quiet" id="cancelPlan">Cancel instant alerts</button></p>`
       : ''
 }</div>`
     : flags.paypal
-    ? `<div class="panel"><h2>Free daily email</h2>
-<p class="muted">One email each morning with everything that opened up in the last day. Leftover and returned tags often sell out within hours.</p>
-<p><strong>Get instant email${textsEnabled(env) ? ' and text' : ''} alerts for ${escapeHtml(env.PAID_PRICE_LABEL)}.</strong> Billed monthly through PayPal. Cancel any time.</p>
+    ? `<div class="panel"><h2>Subscribe to start alerts</h2>
+<p class="muted">Your settings are saved. Alerts start as soon as you subscribe. Leftover and returned tags often sell out within hours.</p>
+<p><strong>Instant email${textsEnabled(env) ? ' and text' : ''} alerts for ${escapeHtml(env.PAID_PRICE_LABEL)}.</strong> Billed ${env.PAID_INTERVAL === 'month' ? 'monthly' : 'once a year'} through PayPal. Cancel any time.</p>
 <div id="paypal-button" style="max-width:340px;margin-top:10px"></div></div>`
-    : `<div class="panel"><h2>Free daily email</h2>
-<p class="muted">One email each morning with everything that opened up in the last day. Instant alerts by email and text are coming soon.</p></div>`;
+    : `<div class="panel"><h2>Subscriptions open soon</h2>
+<p class="muted">Your settings are saved. We'll email you as soon as you can subscribe.</p></div>`;
 
   const body = `<div class="app">${notice}
 <h1>Your alerts</h1><p class="muted">${escapeHtml(sub.email)} ${flags.owner ? '&nbsp;|&nbsp; <a href="/admin/subscribers">Subscribers</a>' : ''} &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
@@ -245,7 +245,7 @@ export function paypalAdminPage(
   v: {
     mode: 'sandbox' | 'live';
     keys: boolean;
-    settings: { product_id?: string; plan_id?: string; price?: string; webhook_id?: string };
+    settings: { product_id?: string; plan_id?: string; price?: string; interval?: string; webhook_id?: string };
     intro: boolean;
     ready: boolean;
     paid: number;
@@ -268,15 +268,16 @@ ${v.notice ? `<div class="notice" role="status">${escapeHtml(v.notice)}</div>` :
 <p>Account mode: <span class="mode">${live ? 'Live (real payments)' : 'Sandbox (test payments)'}</span></p>
 <ul class="steps">
 ${step(v.keys, `PayPal keys added in Cloudflare (<code>PAYPAL_CLIENT_ID</code>, <code>PAYPAL_SECRET</code>)`)}
-${step(!!v.settings.plan_id, v.settings.plan_id ? `Monthly plan: <strong>$${escapeHtml(v.settings.price ?? '')}/month</strong> <code>${escapeHtml(v.settings.plan_id)}</code>` : 'Monthly plan created')}
+${step(!!v.settings.plan_id, v.settings.plan_id ? `Plan: <strong>$${escapeHtml(v.settings.price ?? '')}/${escapeHtml(v.settings.interval ?? 'month')}</strong> <code>${escapeHtml(v.settings.plan_id)}</code>` : 'Plan created')}
 ${step(!!v.settings.webhook_id, 'PayPal connected to this site (payment and cancel notices)')}
 ${step(!v.intro, v.intro ? 'Free launch period is still on, so no one is offered a paid plan yet' : 'Free launch period is over')}
 </ul>
 <p style="margin-top:10px"><strong>${v.ready && !v.intro ? 'Paid plans are open to subscribers.' : 'Paid plans are switched off.'}</strong> ${v.paid} paying subscriber${v.paid === 1 ? '' : 's'}${v.canceling ? `, ${v.canceling} canceled and finishing their paid month` : ''}.</p></div>
 
-<div class="panel"><h2>${v.settings.plan_id ? 'Change the price' : 'Create the monthly plan'}</h2>
-<p class="muted">${v.settings.plan_id ? 'This makes a new plan for new sign-ups. People already subscribed keep the price they signed up at.' : 'Creates the Leftover Tag Alerts product and a monthly plan in the Horn &amp; Fin PayPal account.'}</p>
-<form method="post" action="/admin/paypal/plan" class="row"><label>$ <input type="text" name="price" inputmode="decimal" value="${escapeHtml(v.settings.price ?? '3.99')}" pattern="\\d{1,3}\\.\\d{2}" required></label> / month
+<div class="panel"><h2>${v.settings.plan_id ? 'Change the price' : 'Create the plan'}</h2>
+<p class="muted">${v.settings.plan_id ? 'This makes a new plan for new sign-ups. People already subscribed keep the price they signed up at.' : 'Creates the Leftover Tag Alerts product and the plan in the Horn &amp; Fin PayPal account.'}</p>
+<form method="post" action="/admin/paypal/plan" class="row"><label>$ <input type="text" name="price" inputmode="decimal" value="${escapeHtml(v.settings.price ?? '19.99')}" pattern="\\d{1,3}\\.\\d{2}" required></label>
+<select name="interval" aria-label="Billing period"><option value="year"${(v.settings.interval ?? 'year') === 'year' ? ' selected' : ''}>per year</option><option value="month"${v.settings.interval === 'month' ? ' selected' : ''}>per month</option></select>
 <button class="btn" ${v.keys ? '' : 'disabled'}>${v.settings.plan_id ? 'Create new price' : 'Create plan'}</button></form></div>
 
 <div class="panel"><h2>Connect PayPal to this site</h2>

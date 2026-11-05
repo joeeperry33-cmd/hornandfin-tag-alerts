@@ -15,6 +15,10 @@ export interface Env {
   ADMIN_EMAILS?: string;
   BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
+  /** Billing period for instant alerts: "year" or "month". */
+  PAID_INTERVAL?: string;
+  /** "true" to offer a free daily-email tier alongside the paid plan. */
+  FREE_TIER?: string;
   INTRO_FREE?: string;
   PARTNER_URL?: string;
   USER_AGENT: string;

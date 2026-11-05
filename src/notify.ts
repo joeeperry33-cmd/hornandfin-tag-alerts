@@ -258,6 +258,7 @@ export function smsBody(e: AlertEvent, p: Personal): string {
 /** Free tier: one morning email covering everything found in the last day. */
 export async function sendDigests(env: Env): Promise<number> {
   if (isIntro(env)) return 0; // during launch everyone already gets instant alerts
+  if (env.FREE_TIER !== 'true') return 0; // one paid plan, no free daily email
   const events = await recentEvents(env, DIGEST_WINDOW_HOURS);
   if (!events.length) return 0;
   const { results: subs } = await env.DB.prepare(

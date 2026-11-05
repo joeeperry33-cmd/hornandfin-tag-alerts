@@ -253,7 +253,8 @@ function isOwner(env: Env, sub: Subscriber | null): boolean {
 async function withPricing(env: Env): Promise<Env> {
   try {
     const s = await loadPaypalSettings(env);
-    return { ...env, PAID_PRICE_LABEL: priceLabel(s.price, env.PAID_PRICE_LABEL), PAYMENTS_READY: !isIntro(env) && paymentsReady(env, s), PAYPAL_PLAN_ID: s.plan_id };
+    const interval = s.price ? s.interval : env.PAID_INTERVAL;
+    return { ...env, PAID_PRICE_LABEL: priceLabel(s.price, interval, env.PAID_PRICE_LABEL), PAID_INTERVAL: interval ?? 'year', PAYMENTS_READY: !isIntro(env) && paymentsReady(env, s), PAYPAL_PLAN_ID: s.plan_id };
   } catch {
     return { ...env, PAYMENTS_READY: false };
   }
@@ -361,8 +362,8 @@ export default {
         const form = await req.formData();
         try {
           if (path === '/admin/paypal/plan') {
-            const s = await createPlan(env, String(form.get('price') ?? '').trim());
-            notice = `New plan created at $${s.price}/month. New sign-ups pay this price; current subscribers keep theirs.`;
+            const s = await createPlan(env, String(form.get('price') ?? '').trim(), String(form.get('interval') ?? 'year'));
+            notice = `New plan created at $${s.price}/${s.interval}. New sign-ups pay this price; current subscribers keep theirs.`;
           } else if (path === '/admin/paypal/webhook') {
             await connectWebhook(env);
             notice = 'PayPal is connected to this site.';
