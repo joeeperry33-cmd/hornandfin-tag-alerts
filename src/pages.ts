@@ -63,7 +63,7 @@ export function managePage(
 <span>I agree to receive recurring automated tag alert text messages from Leftover Tag Alerts at this number. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. Consent is not a condition of purchase. See our <a href="/privacy">privacy policy</a> and <a href="/terms">terms</a>.</span></label>`
     : '<p class="muted">Text alerts are coming soon. We\'ll email you when you can add your cell number.</p>';
 
-  const plan = intro
+  const plan = intro && !(flags.paypal && !paid)
     ? `<div class="panel"><h2>Instant alerts<span class="pill">Free during launch</span></h2>
 <p class="muted">You get an email within about 15 minutes of a tag list changing in the states you pick.</p>
 ${phoneFields}</div>`

@@ -260,6 +260,11 @@ async function withPricing(env: Env): Promise<Env> {
   }
 }
 
+/** The owner can test PayPal in sandbox mode before paid plans open to the public. */
+function ownerSandboxTest(env: Env, sub: Subscriber | null): boolean {
+  return isOwner(env, sub) && paypalEnv(env) === 'sandbox' && paypalKeysSet(env) && !!env.PAYPAL_PLAN_ID;
+}
+
 /** Owner form posts must come from this site (the session cookie is SameSite=Lax; this is a second check). */
 function sameOrigin(env: Env, req: Request): boolean {
   const origin = req.headers.get('origin');
@@ -321,7 +326,7 @@ export default {
         upgraded: url.searchParams.has('upgraded'),
         saved: url.searchParams.has('saved'),
         owner: isOwner(env, sub),
-        paypal: env.PAYMENTS_READY && env.PAYPAL_CLIENT_ID && env.PAYPAL_PLAN_ID ? { clientId: env.PAYPAL_CLIENT_ID, planId: env.PAYPAL_PLAN_ID } : undefined,
+        paypal: (env.PAYMENTS_READY || ownerSandboxTest(env, sub)) && env.PAYPAL_CLIENT_ID && env.PAYPAL_PLAN_ID ? { clientId: env.PAYPAL_CLIENT_ID, planId: env.PAYPAL_PLAN_ID } : undefined,
       });
     }
 
@@ -331,7 +336,7 @@ export default {
       if (!sub) return json({ error: 'This link has expired.' }, 401);
       try {
         if (path === '/api/paypal/approved') {
-          if (!env.PAYMENTS_READY) return json({ error: 'Paid plans are not open yet.' }, 400);
+          if (!env.PAYMENTS_READY && !ownerSandboxTest(env, sub)) return json({ error: 'Paid plans are not open yet.' }, 400);
           await confirmApproval(env, sub, String(b.subscriptionID ?? ''));
           return json({ ok: true });
         }
