@@ -13,6 +13,8 @@ export interface Env {
   PUBLIC_LOCATION?: string;
   /** Comma-separated emails that can open /admin/subscribers after signing in. */
   ADMIN_EMAILS?: string;
+  /** Google Analytics 4 measurement ID (G-XXXXXXX). Public pages only. */
+  GA_MEASUREMENT_ID?: string;
   BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
   /** Billing period for instant alerts: "year" or "month". */

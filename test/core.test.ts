@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
+import { analyticsTag } from '../src/site';
 import { coloradoListings, coloradoRunDate, parseColoradoText } from '../src/parsers/colorado';
 import { listingsFromJson } from '../src/parsers/json';
 import { checkInterval, diffListings, isDue, normalizeSpecies } from '../src/check';
@@ -393,5 +394,14 @@ describe('Colorado leftover list (browser snapshot)', () => {
     expect(l.find((x) => x.key === 'EF011O4R')).toMatchObject({ species: 'elk', sex: 'antlerless', weapon: 'rifle', quantity: 1468 });
     expect(l.find((x) => x.key === 'EM231O4R')!.label).toBe('Elk EM231O4R – GMU 231 – 11/18/2026 - 11/22/2026 – List A');
     expect(coloradoRunDate(text)).toBe('Nov 02 2026 8:44:00 AM MST');
+  });
+});
+
+describe('Google Analytics', () => {
+  it('loads only on public pages with a valid ID', () => {
+    expect(analyticsTag({ GA_MEASUREMENT_ID: 'G-ABC123XYZ' } as never, {})).toContain('gtag/js?id=G-ABC123XYZ');
+    expect(analyticsTag({ GA_MEASUREMENT_ID: 'G-ABC123XYZ' } as never, { noindex: true })).toBe('');
+    expect(analyticsTag({} as never, {})).toBe('');
+    expect(analyticsTag({ GA_MEASUREMENT_ID: 'UA-1234-1' } as never, {})).toBe('');
   });
 });

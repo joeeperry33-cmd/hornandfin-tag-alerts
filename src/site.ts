@@ -69,6 +69,15 @@ interface ShellOpts {
   nav?: boolean;
 }
 
+/** Google Analytics on public pages only. Private pages (settings, sign-in, confirm, owner pages) are all
+ * noindex and carry sign-in tokens in their links, so they never load it. */
+export function analyticsTag(env: Env, opts: { noindex?: boolean }): string {
+  const id = env.GA_MEASUREMENT_ID?.trim();
+  if (!id || opts.noindex || !/^G-[A-Z0-9]{4,}$/.test(id)) return '';
+  return `<script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${id}');</script>`;
+}
+
 export function shell(env: Env, opts: ShellOpts, body: string): Response {
   const canonical = env.SITE_URL + (opts.path ?? '/');
   const desc = opts.description ?? 'Alerts when states post leftover, returned and reissued big game hunting tags.';
@@ -79,7 +88,7 @@ export function shell(env: Env, opts: ShellOpts, body: string): Response {
 ${opts.noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${canonical}">`}
 <meta property="og:title" content="${escapeHtml(opts.title)}"><meta property="og:description" content="${escapeHtml(desc)}"><meta property="og:url" content="${canonical}"><meta property="og:type" content="website">
 <meta name="theme-color" content="#1f3d35"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
-${FONTS}<style>${BASE_CSS}${opts.css ?? ''}</style></head><body>
+${FONTS}${analyticsTag(env, opts)}<style>${BASE_CSS}${opts.css ?? ''}</style></head><body>
 <header class="topbar"><div class="wrap"><a class="brand" href="/">${MARK_SVG}<span>Leftover Tag Alerts</span></a>
 ${opts.nav === false ? '' : `<nav aria-label="Main">${isIntro(env) ? '<a href="/#how">How it works</a>' : '<a href="/#plans">Plans</a>'}&nbsp;&nbsp;&nbsp;<a href="/#states">States</a>&nbsp;&nbsp;&nbsp;<a href="/#questions">Questions</a>&nbsp;&nbsp;&nbsp;<a href="/login" class="signin">Sign in</a></nav>`}</div></header>
 <main>${body}</main>
@@ -370,7 +379,7 @@ var st=vals('states'),sp=vals('species');if(!st.length||!sp.length){msg.classNam
 var btn=f.querySelector('button[type=submit]');btn.disabled=true;btn.textContent='Sending…';
 fetch('/api/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:email,states:st,species:sp,website:f.website.value})})
 .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||'Sign-up failed. Try again in a minute.');});})
-.then(function(){var d=document.createElement('div');d.className='done';d.setAttribute('role','status');d.innerHTML='<strong>Check your inbox.</strong> We sent a confirmation link to <span></span>. Click it to turn on your alerts.';d.querySelector('span').textContent=email;f.replaceWith(d);})
+.then(function(){if(window.gtag)gtag('event','sign_up',{method:'email'});var d=document.createElement('div');d.className='done';d.setAttribute('role','status');d.innerHTML='<strong>Check your inbox.</strong> We sent a confirmation link to <span></span>. Click it to turn on your alerts.';d.querySelector('span').textContent=email;f.replaceWith(d);})
 .catch(function(x){msg.className='form-msg err';msg.textContent=x.message;btn.disabled=false;btn.textContent='Send me alerts';});};
 })();
 </script>`;
@@ -393,18 +402,20 @@ const PROSE_CSS = `.prose{max-width:760px;padding:48px 20px 72px;margin:0 auto}.
 
 export function privacyPage(env: Env): Response {
   return shell(env, { title: 'Privacy policy | Leftover Tag Alerts', path: '/privacy', css: PROSE_CSS }, `<article class="prose">
-<h1>Privacy policy</h1><p class="updated">Last updated November 2, 2026</p>
+<h1>Privacy policy</h1><p class="updated">Last updated ${env.GA_MEASUREMENT_ID ? 'November 5, 2026' : 'November 2, 2026'}</p>
 <p>${escapeHtml(env.SITE_NAME)} is operated by ${escapeHtml(operator(env))} ("we"). This policy explains what we collect when you sign up for tag alerts and what we do with it.</p>
 <h2>What we collect</h2>
 <ul><li>Your email address, and the states and species you choose.</li>
 <li>If you subscribe to instant alerts: your mobile number (if you add one), the date you agreed to receive texts, and a customer ID from our payment processor. We never see or store your card number.</li>
 <li>Basic technical data needed to run the service, such as the IP address used to sign up (to stop spam sign-ups) and records of which alerts we sent you.</li></ul>
+${env.GA_MEASUREMENT_ID ? `<h2>Analytics</h2>
+<p>Our public pages use Google Analytics to count visits and see which pages are useful. Google Analytics sets cookies and collects information such as pages viewed, approximate location, device and browser. We don't send Google your email address or alert settings, and your settings and sign-in pages don't use Google Analytics. You can opt out with Google's browser add-on at tools.google.com/dlpage/gaoptout, or by blocking cookies in your browser.</p>` : ''}
 <h2>How we use it</h2>
 <p>Only to send the alerts you asked for, to confirm your sign-up, to manage your subscription, and to answer you if you contact us. We do not sell, rent or share your information for anyone else's marketing.</p>
 <h2>Text messages</h2>
 <p>We send text messages only to instant subscribers who enter a mobile number and check the consent box. Messages are recurring automated tag alerts; frequency varies with how often states post tags. Message and data rates may apply. Reply STOP to stop texts and HELP for help. <strong>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes.</strong> Text messaging opt-in data and consent are not shared with any third parties.</p>
 <h2>Services we use</h2>
-<p>We use these companies to run the service, and they handle your data only for that purpose: Cloudflare (hosting and database), Resend (email delivery), Twilio (text messages) and PayPal (payments). We never see or store your card or bank details; PayPal handles them.</p>
+<p>We use these companies to run the service, and they handle your data only for that purpose: Cloudflare (hosting and database), Resend (email delivery), Twilio (text messages), PayPal (payments)${env.GA_MEASUREMENT_ID ? ' and Google Analytics (visit statistics on public pages)' : ''}. We never see or store your card or bank details; PayPal handles them.</p>
 <h2>How long we keep it</h2>
 <p>We keep your information while you're subscribed. If you unsubscribe, we stop all messages right away and delete your account data on request.</p>
 <h2>Your choices</h2>
