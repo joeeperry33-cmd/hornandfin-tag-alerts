@@ -72,10 +72,22 @@ interface ShellOpts {
 /** Google Analytics on public pages only. Private pages (settings, sign-in, confirm, owner pages) are all
  * noindex and carry sign-in tokens in their links, so they never load it. */
 export function analyticsTag(env: Env, opts: { noindex?: boolean }): string {
+  if (opts.noindex) return '';
+  return gaTag(env) + tiktokTag(env);
+}
+
+function gaTag(env: Env): string {
   const id = env.GA_MEASUREMENT_ID?.trim();
-  if (!id || opts.noindex || !/^G-[A-Z0-9]{4,}$/.test(id)) return '';
+  if (!id || !/^G-[A-Z0-9]{4,}$/.test(id)) return '';
   return `<script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${id}');</script>`;
+}
+
+/** TikTok Pixel base code. Skipped for visitors whose browser sends Global Privacy Control (an opt-out of ad tracking). */
+export function tiktokTag(env: Env, extra = ''): string {
+  const id = env.TIKTOK_PIXEL_ID?.trim();
+  if (!id || !/^[A-Z0-9]{10,30}$/.test(id)) return '';
+  return `<script>if(!navigator.globalPrivacyControl){!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=d.createElement("script");n.type="text/javascript",n.async=!0,n.src=r+"?sdkid="+e+"&lib="+t;e=d.getElementsByTagName("script")[0];e.parentNode.insertBefore(n,e)};ttq.load('${id}');ttq.page();${extra}}(window,document,'ttq')}</script>`;
 }
 
 export function shell(env: Env, opts: ShellOpts, body: string): Response {
@@ -379,7 +391,7 @@ var st=vals('states'),sp=vals('species');if(!st.length||!sp.length){msg.classNam
 var btn=f.querySelector('button[type=submit]');btn.disabled=true;btn.textContent='Sending…';
 fetch('/api/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:email,states:st,species:sp,website:f.website.value})})
 .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||'Sign-up failed. Try again in a minute.');});})
-.then(function(){if(window.gtag)gtag('event','sign_up',{method:'email'});var d=document.createElement('div');d.className='done';d.setAttribute('role','status');d.innerHTML='<strong>Check your inbox.</strong> We sent a confirmation link to <span></span>. Click it to turn on your alerts.';d.querySelector('span').textContent=email;f.replaceWith(d);})
+.then(function(){if(window.gtag)gtag('event','sign_up',{method:'email'});if(window.ttq)ttq.track('CompleteRegistration');var d=document.createElement('div');d.className='done';d.setAttribute('role','status');d.innerHTML='<strong>Check your inbox.</strong> We sent a confirmation link to <span></span>. Click it to turn on your alerts.';d.querySelector('span').textContent=email;f.replaceWith(d);})
 .catch(function(x){msg.className='form-msg err';msg.textContent=x.message;btn.disabled=false;btn.textContent='Send me alerts';});};
 })();
 </script>`;
@@ -402,12 +414,14 @@ const PROSE_CSS = `.prose{max-width:760px;padding:48px 20px 72px;margin:0 auto}.
 
 export function privacyPage(env: Env): Response {
   return shell(env, { title: 'Privacy policy | Leftover Tag Alerts', path: '/privacy', css: PROSE_CSS }, `<article class="prose">
-<h1>Privacy policy</h1><p class="updated">Last updated ${env.GA_MEASUREMENT_ID ? 'November 5, 2026' : 'November 2, 2026'}</p>
+<h1>Privacy policy</h1><p class="updated">Last updated ${env.TIKTOK_PIXEL_ID ? 'November 7, 2026' : env.GA_MEASUREMENT_ID ? 'November 5, 2026' : 'November 2, 2026'}</p>
 <p>${escapeHtml(env.SITE_NAME)} is operated by ${escapeHtml(operator(env))} ("we"). This policy explains what we collect when you sign up for tag alerts and what we do with it.</p>
 <h2>What we collect</h2>
 <ul><li>Your email address, and the states and species you choose.</li>
 <li>If you subscribe to instant alerts: your mobile number (if you add one), the date you agreed to receive texts, and a customer ID from our payment processor. We never see or store your card number.</li>
 <li>Basic technical data needed to run the service, such as the IP address used to sign up (to stop spam sign-ups) and records of which alerts we sent you.</li></ul>
+${env.TIKTOK_PIXEL_ID ? `<h2>Advertising</h2>
+<p>We advertise on TikTok. Our public pages, and the page you see right after subscribing, use the TikTok Pixel so TikTok can tell us which ads lead to sign-ups and subscriptions. The pixel uses cookies and shares information such as pages viewed, the fact that you signed up or subscribed, your IP address and browser details with TikTok, which may use it to show you ads. We don't send TikTok your email address or alert settings. If your browser sends a Global Privacy Control signal, the pixel doesn't load. You can also limit ad tracking in your browser or TikTok settings.</p>` : ''}
 ${env.GA_MEASUREMENT_ID ? `<h2>Analytics</h2>
 <p>Our public pages use Google Analytics to count visits and see which pages are useful. Google Analytics sets cookies and collects information such as pages viewed, approximate location, device and browser. We don't send Google your email address or alert settings, and your settings and sign-in pages don't use Google Analytics. You can opt out with Google's browser add-on at tools.google.com/dlpage/gaoptout, or by blocking cookies in your browser.</p>` : ''}
 <h2>How we use it</h2>
@@ -415,7 +429,7 @@ ${env.GA_MEASUREMENT_ID ? `<h2>Analytics</h2>
 <h2>Text messages</h2>
 <p>We send text messages only to instant subscribers who enter a mobile number and check the consent box. Messages are recurring automated tag alerts; frequency varies with how often states post tags. Message and data rates may apply. Reply STOP to stop texts and HELP for help. <strong>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes.</strong> Text messaging opt-in data and consent are not shared with any third parties.</p>
 <h2>Services we use</h2>
-<p>We use these companies to run the service, and they handle your data only for that purpose: Cloudflare (hosting and database), Resend (email delivery), Twilio (text messages), PayPal (payments)${env.GA_MEASUREMENT_ID ? ' and Google Analytics (visit statistics on public pages)' : ''}. We never see or store your card or bank details; PayPal handles them.</p>
+<p>We use these companies to run the service, and they handle your data only for that purpose: Cloudflare (hosting and database), Resend (email delivery), Twilio (text messages), PayPal (payments)${env.GA_MEASUREMENT_ID ? ', Google Analytics (visit statistics on public pages)' : ''}${env.TIKTOK_PIXEL_ID ? ', TikTok (ad measurement)' : ''}. We never see or store your card or bank details; PayPal handles them.</p>
 <h2>How long we keep it</h2>
 <p>We keep your information while you're subscribed. If you unsubscribe, we stop all messages right away and delete your account data on request.</p>
 <h2>Your choices</h2>

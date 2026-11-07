@@ -15,6 +15,8 @@ export interface Env {
   ADMIN_EMAILS?: string;
   /** Google Analytics 4 measurement ID (G-XXXXXXX). Public pages only. */
   GA_MEASUREMENT_ID?: string;
+  /** TikTok Pixel ID for ad measurement. Public pages plus the post-subscribe page. */
+  TIKTOK_PIXEL_ID?: string;
   BUSINESS_ADDRESS: string;
   PAID_PRICE_LABEL: string;
   /** Billing period for instant alerts: "year" or "month". */

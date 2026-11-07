@@ -405,3 +405,13 @@ describe('Google Analytics', () => {
     expect(analyticsTag({ GA_MEASUREMENT_ID: 'UA-1234-1' } as never, {})).toBe('');
   });
 });
+
+describe('TikTok pixel', () => {
+  it('loads with a valid pixel ID, respects Global Privacy Control, and stays off private pages', () => {
+    const env = { TIKTOK_PIXEL_ID: 'C1A2B3C4D5E6F7G8H9I0' } as never;
+    expect(analyticsTag(env, {})).toContain("ttq.load('C1A2B3C4D5E6F7G8H9I0')");
+    expect(analyticsTag(env, {})).toContain('navigator.globalPrivacyControl');
+    expect(analyticsTag(env, { noindex: true })).toBe('');
+    expect(analyticsTag({ TIKTOK_PIXEL_ID: 'bad id<script>' } as never, {})).toBe('');
+  });
+});

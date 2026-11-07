@@ -1,4 +1,4 @@
-import { shell } from './site';
+import { shell, tiktokTag } from './site';
 import type { Env, Subscriber } from './types';
 import { escapeHtml, isIntro, SPECIES, STATES, textsEnabled } from './util';
 
@@ -139,7 +139,13 @@ document.head.appendChild(s);})();`
     : ''
 }
 </script>`;
-  return shell(env, { title: 'Your alerts | Leftover Tag Alerts', noindex: true, nav: false, css: APP_CSS }, body);
+  // Right after PayPal approval (clean URL, no sign-in token): tell TikTok an ad led to a subscription.
+  const price = /\$(\d+(?:\.\d{2})?)/.exec(env.PAID_PRICE_LABEL)?.[1] ?? '0';
+  const conversion =
+    flags.upgraded && paid
+      ? tiktokTag(env, `ttq.track('CompletePayment',{value:${Number(price)},currency:'USD',content_id:'instant-alerts',content_type:'product'});`)
+      : '';
+  return shell(env, { title: 'Your alerts | Leftover Tag Alerts', noindex: true, nav: false, css: APP_CSS }, body + conversion);
 }
 
 export function loginPage(env: Env): Response {
