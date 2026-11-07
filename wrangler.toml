@@ -40,7 +40,7 @@ PAID_INTERVAL = "year"
 FREE_TIER = "false"
 PAYPAL_ENV = "live"
 # "true" = launch period: every confirmed subscriber gets instant alerts free, no prices or upgrade buttons shown.
-INTRO_FREE = "true"
+INTRO_FREE = "false"
 PARTNER_URL = "https://hornandfin.com"
 USER_AGENT = "LeftoverTagAlerts/0.2 (+https://leftovertagalerts.com/bot)"
 
