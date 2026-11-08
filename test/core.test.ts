@@ -1,3 +1,5 @@
+import { currentSale, nextChargeAmount } from '../src/paypal';
+import { chargeToday, priceSentence, saleEndsText } from '../src/util';
 import { describe, expect, it } from 'vitest';
 import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
 import { analyticsTag } from '../src/site';
@@ -413,5 +415,33 @@ describe('TikTok pixel', () => {
     expect(analyticsTag(env, {})).toContain('navigator.globalPrivacyControl');
     expect(analyticsTag(env, { noindex: true })).toBe('');
     expect(analyticsTag({ TIKTOK_PIXEL_ID: 'bad id<script>' } as never, {})).toBe('');
+  });
+});
+
+describe('end-of-season sale', () => {
+  it('is on until midnight Pacific on the end date', () => {
+    const s = { sale_plan_id: 'P-SALE', sale_price: '19.99', sale_ends: '2027-03-01' };
+    expect(currentSale(s, new Date('2027-02-28T23:00:00-08:00'))?.planId).toBe('P-SALE');
+    expect(currentSale(s, new Date('2027-03-01T00:00:00-08:00'))).toBeNull();
+    expect(currentSale({ sale_price: '19.99', sale_ends: '2027-03-01' }, new Date('2026-12-01'))).toBeNull();
+  });
+  it('describes the price', () => {
+    const env = { PAID_PRICE_LABEL: '$39.99/year', SALE_PRICE: '19.99', SALE_ENDS: '2027-03-01' };
+    expect(priceSentence(env)).toBe('$19.99 for your first year, then $39.99 a year');
+    expect(saleEndsText(env)).toBe('March 1, 2027');
+    expect(chargeToday(env)).toBe(19.99);
+    expect(priceSentence({ PAID_PRICE_LABEL: '$39.99/year' })).toBe('$39.99 a year');
+    expect(chargeToday({ PAID_PRICE_LABEL: '$39.99/year' })).toBe(39.99);
+  });
+  it('knows the next charge after the sale year', () => {
+    const plan = {
+      billing_cycles: [
+        { tenure_type: 'TRIAL', sequence: 1, total_cycles: 1, pricing_scheme: { fixed_price: { value: '19.99' } } },
+        { tenure_type: 'REGULAR', sequence: 2, total_cycles: 0, pricing_scheme: { fixed_price: { value: '39.99' } } },
+      ],
+    };
+    const sub = (done: number) => ({ id: 'I-1', status: 'ACTIVE', plan_id: 'P', billing_info: { cycle_executions: [{ tenure_type: 'TRIAL', sequence: 1, cycles_completed: done, total_cycles: 1 }] } });
+    expect(nextChargeAmount(sub(0), plan)).toBe('19.99');
+    expect(nextChargeAmount(sub(1), plan)).toBe('39.99');
   });
 });

@@ -1,8 +1,9 @@
 import { shell, tiktokTag } from './site';
 import type { Env, Subscriber } from './types';
-import { escapeHtml, isIntro, SPECIES, STATES, textsEnabled } from './util';
+import { chargeToday, escapeHtml, isIntro, priceSentence, saleEndsText, saleOn, SPECIES, STATES, textsEnabled } from './util';
 
 const APP_CSS = `
+.sale-tag{display:inline-block;background:var(--blaze);color:#fff;font:800 12px/1 var(--display);letter-spacing:.08em;text-transform:uppercase;padding:6px 9px;margin:0 0 6px}
 .app{max-width:760px;margin:0 auto;padding:36px 20px 64px}
 .app h1{font-size:clamp(34px,5vw,46px);font-weight:900;margin-bottom:6px}
 .panel{background:var(--paper);border-top:3px solid var(--ink);padding:20px 20px 22px;margin:0 0 22px}
@@ -82,7 +83,7 @@ ${
     : flags.paypal
     ? `<div class="panel"><h2>Subscribe to start alerts</h2>
 <p class="muted">Your settings are saved. Alerts start as soon as you subscribe. Leftover and returned tags often sell out within hours.</p>
-<p><strong>Instant email${textsEnabled(env) ? ' and text' : ''} alerts for ${escapeHtml(env.PAID_PRICE_LABEL)}.</strong> Billed ${env.PAID_INTERVAL === 'month' ? 'monthly' : 'once a year'} through PayPal. Cancel any time.</p>
+${saleOn(env) ? `<p class="sale-tag">End-of-season sale</p>` : ''}<p><strong>Instant email${textsEnabled(env) ? ' and text' : ''} alerts for ${escapeHtml(priceSentence(env))}.</strong> Billed ${env.PAID_INTERVAL === 'month' ? 'monthly' : 'once a year'} through PayPal and renews automatically until you cancel. Cancel any time.${saleOn(env) ? ` The price goes to ${escapeHtml(env.PAID_PRICE_LABEL.replace('/year', ' a year'))} for new sign-ups on ${escapeHtml(saleEndsText(env))}.` : ''}</p>
 <div id="paypal-button" style="max-width:340px;margin-top:10px"></div></div>`
     : `<div class="panel"><h2>Subscriptions open soon</h2>
 <p class="muted">Your settings are saved. We'll email you as soon as you can subscribe.</p></div>`;
@@ -140,10 +141,10 @@ document.head.appendChild(s);})();`
 }
 </script>`;
   // Right after PayPal approval (clean URL, no sign-in token): tell TikTok an ad led to a subscription.
-  const price = /\$(\d+(?:\.\d{2})?)/.exec(env.PAID_PRICE_LABEL)?.[1] ?? '0';
+  const price = chargeToday(env);
   const conversion =
     flags.upgraded && paid
-      ? tiktokTag(env, `ttq.track('CompletePayment',{value:${Number(price)},currency:'USD',content_id:'instant-alerts',content_type:'product'});`)
+      ? tiktokTag(env, `ttq.track('CompletePayment',{value:${price},currency:'USD',content_id:'instant-alerts',content_type:'product'});`)
       : '';
   return shell(env, { title: 'Your alerts | Leftover Tag Alerts', noindex: true, nav: false, css: APP_CSS }, body + conversion);
 }
@@ -251,7 +252,7 @@ export function paypalAdminPage(
   v: {
     mode: 'sandbox' | 'live';
     keys: boolean;
-    settings: { product_id?: string; plan_id?: string; price?: string; interval?: string; webhook_id?: string };
+    settings: { product_id?: string; plan_id?: string; price?: string; interval?: string; webhook_id?: string; sale_plan_id?: string; sale_price?: string; sale_ends?: string };
     intro: boolean;
     ready: boolean;
     paid: number;
@@ -284,7 +285,11 @@ ${step(!v.intro, v.intro ? 'Free launch period is still on, so no one is offered
 <p class="muted">${v.settings.plan_id ? 'This makes a new plan for new sign-ups. People already subscribed keep the price they signed up at.' : 'Creates the Leftover Tag Alerts product and the plan in the Horn &amp; Fin PayPal account.'}</p>
 <form method="post" action="/admin/paypal/plan" class="row"><label>$ <input type="text" name="price" inputmode="decimal" value="${escapeHtml(v.settings.price ?? '19.99')}" pattern="\\d{1,3}\\.\\d{2}" required></label>
 <select name="interval" aria-label="Billing period"><option value="year"${(v.settings.interval ?? 'year') === 'year' ? ' selected' : ''}>per year</option><option value="month"${v.settings.interval === 'month' ? ' selected' : ''}>per month</option></select>
-<button class="btn" ${v.keys ? '' : 'disabled'}>${v.settings.plan_id ? 'Create new price' : 'Create plan'}</button></form></div>
+<p class="muted" style="width:100%;margin:10px 0 4px">Optional sale: a lower price for the first year, for people who sign up before the end date. Leave blank for no sale.</p>
+<label>Sale $ <input type="text" name="sale_price" inputmode="decimal" value="${escapeHtml(v.settings.sale_price ?? '')}" pattern="\\d{1,3}\\.\\d{2}" placeholder="19.99"></label>
+<label>until <input type="date" name="sale_ends" value="${escapeHtml(v.settings.sale_ends ?? '')}"></label>
+<button class="btn" ${v.keys ? '' : 'disabled'}>${v.settings.plan_id ? 'Create new price' : 'Create plan'}</button></form>
+${v.settings.sale_plan_id ? `<p class="muted">Sale plan: <strong>$${escapeHtml(v.settings.sale_price ?? '')} first ${escapeHtml(v.settings.interval ?? 'year')}, then $${escapeHtml(v.settings.price ?? '')}</strong> until ${escapeHtml(v.settings.sale_ends ?? '')} <code>${escapeHtml(v.settings.sale_plan_id)}</code></p>` : ''}</div>
 
 <div class="panel"><h2>Connect PayPal to this site</h2>
 <p class="muted">Registers <code>${escapeHtml(env.API_URL)}/api/paypal/webhook</code> with PayPal so the site hears about payments, renewals and cancellations. Safe to run again.</p>

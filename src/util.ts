@@ -111,3 +111,33 @@ export function json(data: unknown, status = 200, headers: Record<string, string
     headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
   });
 }
+
+// ---- end-of-season sale wording ----
+
+interface PriceEnv { PAID_PRICE_LABEL: string; PAID_INTERVAL?: string; SALE_PRICE?: string; SALE_ENDS?: string }
+
+/** "$39.99/year" -> "$39.99 a year" */
+export function regularPrice(env: PriceEnv): string {
+  return env.PAID_PRICE_LABEL.replace('/year', ' a year').replace('/month', ' a month');
+}
+
+export function saleOn(env: PriceEnv): boolean {
+  return !!env.SALE_PRICE && !!env.SALE_ENDS;
+}
+
+/** "2027-03-01" -> "March 1, 2027" */
+export function saleEndsText(env: PriceEnv): string {
+  if (!env.SALE_ENDS) return '';
+  return new Date(`${env.SALE_ENDS}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+/** What a new subscriber pays, in one phrase. */
+export function priceSentence(env: PriceEnv): string {
+  return saleOn(env) ? `$${env.SALE_PRICE} for your first year, then ${regularPrice(env)}` : regularPrice(env);
+}
+
+/** The amount charged today. */
+export function chargeToday(env: PriceEnv): number {
+  if (saleOn(env)) return Number(env.SALE_PRICE);
+  return Number(/\$(\d+(?:\.\d{2})?)/.exec(env.PAID_PRICE_LABEL)?.[1] ?? '0');
+}

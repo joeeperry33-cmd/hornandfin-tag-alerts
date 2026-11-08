@@ -10,12 +10,14 @@ import {
   connectWebhook,
   createPlan,
   expirePaidPlans,
+  renewalReminders,
   handlePaypalEvent,
   loadPaypalSettings,
   paymentsReady,
   paypalEnv,
   paypalKeysSet,
   priceLabel,
+  currentSale,
   verifyWebhook,
 } from './paypal';
 import type { AlertEvent, Env, Source, Subscriber } from './types';
@@ -254,7 +256,16 @@ async function withPricing(env: Env): Promise<Env> {
   try {
     const s = await loadPaypalSettings(env);
     const interval = s.price ? s.interval : env.PAID_INTERVAL;
-    return { ...env, PAID_PRICE_LABEL: priceLabel(s.price, interval, env.PAID_PRICE_LABEL), PAID_INTERVAL: interval ?? 'year', PAYMENTS_READY: !isIntro(env) && paymentsReady(env, s), PAYPAL_PLAN_ID: s.plan_id };
+    const sale = currentSale(s);
+    return {
+      ...env,
+      PAID_PRICE_LABEL: priceLabel(s.price, interval, env.PAID_PRICE_LABEL),
+      PAID_INTERVAL: interval ?? 'year',
+      PAYMENTS_READY: !isIntro(env) && paymentsReady(env, s),
+      PAYPAL_PLAN_ID: sale ? sale.planId : s.plan_id,
+      SALE_PRICE: sale?.price,
+      SALE_ENDS: sale?.ends,
+    };
   } catch {
     return { ...env, PAYMENTS_READY: false };
   }
@@ -367,8 +378,12 @@ export default {
         const form = await req.formData();
         try {
           if (path === '/admin/paypal/plan') {
-            const s = await createPlan(env, String(form.get('price') ?? '').trim(), String(form.get('interval') ?? 'year'));
-            notice = `New plan created at $${s.price}/${s.interval}. New sign-ups pay this price; current subscribers keep theirs.`;
+            const salePrice = String(form.get('sale_price') ?? '').trim();
+            const saleEnds = String(form.get('sale_ends') ?? '').trim();
+            const s = await createPlan(env, String(form.get('price') ?? '').trim(), String(form.get('interval') ?? 'year'), salePrice ? { price: salePrice, ends: saleEnds } : undefined);
+            notice = s.sale_plan_id
+              ? `Plans created: $${s.sale_price} for the first ${s.interval}, then $${s.price}/${s.interval}, for sign-ups before ${s.sale_ends}. After that, new sign-ups pay $${s.price}/${s.interval}.`
+              : `New plan created at $${s.price}/${s.interval}. New sign-ups pay this price; current subscribers keep theirs.`;
           } else if (path === '/admin/paypal/webhook') {
             await connectWebhook(env);
             notice = 'PayPal is connected to this site.';
@@ -447,6 +462,8 @@ export default {
       ctx.waitUntil(
         expirePaidPlans(env)
           .then((n) => n && console.log(`paid plans ended: ${n}`))
+          .then(() => renewalReminders(env))
+          .then((n) => n && console.log(`renewal reminders sent: ${n}`))
           .then(() => sendDigests(env))
           .then((n) => console.log(`digests sent: ${n}`)),
       );

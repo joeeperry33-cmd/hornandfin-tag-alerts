@@ -1,6 +1,6 @@
 import type { AlertEvent, Env, EventItem, Subscriber } from './types';
 import { facetLabels, tagWanted, type Opening, type TagFacets } from './tagtype';
-import { escapeHtml, isIntro, matchesList, nowIso, STATES } from './util';
+import { escapeHtml, isIntro, matchesList, nowIso, priceSentence, STATES } from './util';
 
 const INSTANT_WINDOW_HOURS = 6; // never send an "instant" alert about something older than this
 const DIGEST_WINDOW_HOURS = 26;
@@ -275,7 +275,7 @@ export async function sendDigests(env: Env): Promise<number> {
       .filter((x): x is { e: AlertEvent; p: Personal } => x.p !== null);
     if (!mine.length) continue;
     const upsell = `<div style="background:#e4e9e1;border-radius:4px;padding:12px 14px;font-size:14px;margin-top:8px">
-Leftover and returned tags often sell out within hours. <a href="${manageUrl(env, s)}" style="color:#1f3d35;font-weight:bold">Get instant email and text alerts</a> for ${escapeHtml(env.PAID_PRICE_LABEL)}.</div>`;
+Leftover and returned tags often sell out within hours. <a href="${manageUrl(env, s)}" style="color:#1f3d35;font-weight:bold">Get instant email and text alerts</a> for ${escapeHtml(priceSentence(env))}.</div>`;
     batch.push({
       eventIds: mine.map((x) => x.e.id),
       subId: s.id,
@@ -315,6 +315,24 @@ export async function sendSignInLink(env: Env, sub: Subscriber): Promise<boolean
 <div style="font-size:13px;color:#5b6b5e">Didn't ask for this? You can ignore it. Nothing changes unless you use the link.</div>`;
   const [ok] = await sendEmails(env, [
     { to: sub.email, subject: 'Your Leftover Tag Alerts sign-in link', html: layout(env, sub, inner), text: `Sign in to change your tag alerts: ${url}` },
+  ]);
+  return ok;
+}
+
+/** Reminder sent about 30 days before a yearly plan renews, with the amount and how to cancel. */
+export async function sendRenewalNotice(env: Env, sub: Subscriber, renewsAt: string, amount: string): Promise<boolean> {
+  const date = new Date(renewsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Los_Angeles' });
+  const url = manageUrl(env, sub);
+  const inner = `<div style="font-size:16px;line-height:1.5">Your Leftover Tag Alerts subscription renews automatically on <strong>${escapeHtml(date)}</strong>. PayPal will charge <strong>$${escapeHtml(amount)}</strong> for another year of instant alerts.</div>
+<p style="font-size:15px;line-height:1.5">Nothing to do if you want to keep your alerts. To stop the renewal, cancel any time before then from your settings page or your PayPal account. You keep alerts through the end of the year you've paid for.</p>
+<p><a href="${url}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:10px 16px;border-radius:3px;font-weight:bold">Manage my subscription</a></p>`;
+  const [ok] = await sendEmails(env, [
+    {
+      to: sub.email,
+      subject: `Your tag alerts renew on ${date} for $${amount}`,
+      html: layout(env, sub, inner),
+      text: `Your Leftover Tag Alerts subscription renews automatically on ${date}. PayPal will charge $${amount}. To cancel, visit ${url} or your PayPal account before then.`,
+    },
   ]);
   return ok;
 }

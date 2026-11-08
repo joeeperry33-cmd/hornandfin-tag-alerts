@@ -1,6 +1,6 @@
 import { OPENING_LABEL, type Opening } from './tagtype';
 import type { Env } from './types';
-import { escapeHtml, isIntro, SPECIES, STATES, textsEnabled } from './util';
+import { escapeHtml, isIntro, priceSentence, regularPrice, saleEndsText, saleOn, SPECIES, STATES, textsEnabled } from './util';
 
 /*
  * Leftover Tag Alerts site design
@@ -225,6 +225,8 @@ animation:stampIn .5s cubic-bezier(.2,1.6,.4,1) .6s both}
 .launch .launch-lead{font-size:20px;max-width:38em;margin:0 0 12px}
 .plan-card{background:var(--paper);border-top:4px solid var(--blaze);padding:22px 24px;max-width:560px;margin:8px 0 14px}
 .plan-price b{font:900 52px/1 var(--display)}.plan-price span{font-size:20px;color:var(--moss);margin-left:4px}.plan-price small{display:block;color:var(--moss);font-size:15px;margin-top:4px}
+.sale-tag{display:inline-block;background:var(--blaze);color:#fff;font:800 13px/1 var(--display);letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;margin:0 0 12px}
+.sale-note{margin:10px 0 0;color:var(--moss)}
 .plan-card ul{margin:14px 0 0;padding-left:20px}.plan-card li{margin:6px 0}
 h3.after{margin:22px 0 6px}
 .launch .note{font-size:15px;color:var(--moss);max-width:62em}
@@ -267,16 +269,22 @@ function perMonth(label: string): string {
 
 /** The one plan: instant alerts for the yearly price. */
 function planCard(env: Env): string {
-  const pm = perMonth(env.PAID_PRICE_LABEL);
+  const sale = saleOn(env);
+  const pm = perMonth(sale ? `$${env.SALE_PRICE}/year` : env.PAID_PRICE_LABEL);
   const texts = textsEnabled(env);
+  const head = sale
+    ? `<p class="sale-tag">End-of-season sale</p>
+<div class="plan-price"><b>$${escapeHtml(env.SALE_PRICE ?? '')}</b><span>first year</span>${pm ? `<small>${escapeHtml(pm)}</small>` : ''}</div>
+<p class="sale-note">Sign up before ${escapeHtml(saleEndsText(env))}. On that day the price goes to <strong>${escapeHtml(regularPrice(env))}</strong>. Your plan renews at ${escapeHtml(regularPrice(env))} after your first year.</p>`
+    : `<div class="plan-price"><b>${escapeHtml(env.PAID_PRICE_LABEL.split('/')[0])}</b><span>/${escapeHtml(env.PAID_PRICE_LABEL.split('/')[1] ?? 'year')}</span>${pm ? `<small>${escapeHtml(pm)}</small>` : ''}</div>`;
   return `<div class="plan-card">
-<div class="plan-price"><b>${escapeHtml(env.PAID_PRICE_LABEL.split('/')[0])}</b><span>/${escapeHtml(env.PAID_PRICE_LABEL.split('/')[1] ?? 'year')}</span>${pm ? `<small>${escapeHtml(pm)}</small>` : ''}</div>
+${head}
 <ul>
 <li>Instant email alerts within about 15 minutes of a state list changing</li>
 <li>Every state and species we watch, filtered to what you hunt</li>
 <li>Tag type on every alert: leftover or returned, weapon, antlered or antlerless, resident or nonresident</li>
 ${texts ? '<li>Text alerts too, if you add a cell number</li>' : ''}
-<li>Billed once a year through PayPal. Cancel any time.</li>
+<li>Billed once a year through PayPal${sale ? `: $${escapeHtml(env.SALE_PRICE ?? '')} now, then ${escapeHtml(regularPrice(env))}` : ''}. Renews automatically; cancel any time.</li>
 </ul></div>`;
 }
 
@@ -333,7 +341,7 @@ export function homePage(env: Env, data: HomeData): Response {
 <div class="row"><label for="email" class="sr">Email address</label><input id="email" type="email" name="email" placeholder="you@example.com" autocomplete="email" required>
 <button class="btn" type="submit">Send me alerts</button></div>
 <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-<p class="fine">${isIntro(env) ? 'Free during launch: instant email alerts for every state and species you pick.' : `Instant alerts for ${escapeHtml(env.PAID_PRICE_LABEL.replace('/year', ' a year'))}. Confirm your email, then subscribe with PayPal.`}</p>
+<p class="fine">${isIntro(env) ? 'Free during launch: instant email alerts for every state and species you pick.' : `${saleOn(env) ? `End-of-season sale: instant alerts for ${escapeHtml(priceSentence(env))}. Price goes up ${escapeHtml(saleEndsText(env))}.` : `Instant alerts for ${escapeHtml(regularPrice(env))}.`} Confirm your email, then subscribe with PayPal.`}</p>
 <details><summary>Choose states and species (all selected)</summary>
 <fieldset><legend>Species</legend><div class="pick">${speciesBoxes}</div></fieldset>
 <fieldset><legend>States</legend><div class="picktools"><button type="button" data-all="1">Select all</button><button type="button" data-all="0">Clear</button></div><div class="pick">${stateBoxes}</div></fieldset>
@@ -373,7 +381,7 @@ ${recent}
 ${
   isIntro(env)
     ? `<details><summary>Is it really free?</summary><p>Yes. During launch every alert is free, with no card required. After launch, alerts are ${escapeHtml(env.PAID_PRICE_LABEL.replace('/year', ' a year').replace('/month', ' a month'))}. We'll email you before launch ends, and you're never charged unless you subscribe.</p></details>`
-    : `<details><summary>How much does it cost?</summary><p>Alerts are ${escapeHtml(env.PAID_PRICE_LABEL.replace('/year', ' a year').replace('/month', ' a month'))}, billed through PayPal. Cancel any time from your settings and you keep instant alerts through the period you paid for.</p></details>`
+    : `<details><summary>How much does it cost?</summary><p>${saleOn(env) ? `During our end-of-season sale, alerts are ${escapeHtml(priceSentence(env))}. Sign up before ${escapeHtml(saleEndsText(env))} to get the sale price; after that, new sign-ups pay ${escapeHtml(regularPrice(env))}.` : `Alerts are ${escapeHtml(regularPrice(env))}.`} Billed through PayPal and renews automatically each year. Cancel any time from your settings and you keep instant alerts through the period you paid for.</p></details>`
 }
 </div></section>
 
@@ -448,7 +456,7 @@ export function termsPage(env: Env): Response {
 <h2>No guarantee of availability</h2>
 <p>States change their pages, post late, or sell out before an alert reaches you. Alerts may be delayed, incomplete or wrong. Always confirm availability, eligibility, point rules and season dates on the state's site before you buy a tag or make travel plans. We are not responsible for tags you could not get or costs you incur.</p>
 <h2>Price</h2>
-${isIntro(env) ? `<p>All alerts are free during our launch period. After launch, alerts cost ${escapeHtml(env.PAID_PRICE_LABEL.replace('/year', ' a year').replace('/month', ' a month'))}, billed through PayPal. We'll email current subscribers before launch ends, and you won't be charged unless you subscribe.</p>` : `<p>Instant alerts cost ${escapeHtml(env.PAID_PRICE_LABEL)}, billed through PayPal at the start of each ${env.PAID_INTERVAL === 'month' ? 'month' : 'year'} until you cancel. Cancel any time from your settings page or your PayPal account; you keep instant alerts until the end of the period you paid for. Unsubscribing from all emails also cancels your PayPal subscription. We don't give refunds for the unused part of a period. If we change the price, it applies to new sign-ups; we'll email you before any change to your own plan.</p>`}
+${isIntro(env) ? `<p>All alerts are free during our launch period. After launch, alerts cost ${escapeHtml(env.PAID_PRICE_LABEL.replace('/year', ' a year').replace('/month', ' a month'))}, billed through PayPal. We'll email current subscribers before launch ends, and you won't be charged unless you subscribe.</p>` : `<p>Instant alerts cost ${escapeHtml(env.PAID_PRICE_LABEL)}, billed through PayPal at the start of each ${env.PAID_INTERVAL === 'month' ? 'month' : 'year'} until you cancel.${saleOn(env) ? ` During our end-of-season sale, people who subscribe before ${escapeHtml(saleEndsText(env))} pay $${escapeHtml(env.SALE_PRICE ?? '')} for their first year; the subscription then renews automatically at ${escapeHtml(env.PAID_PRICE_LABEL)}. We'll email you before that first renewal.` : ''} Cancel any time from your settings page or your PayPal account; you keep instant alerts until the end of the period you paid for. Unsubscribing from all emails also cancels your PayPal subscription. We don't give refunds for the unused part of a period. If we change the price, it applies to new sign-ups; we'll email you before any change to your own plan.</p>`}
 <h2>Text messages</h2>
 <p>If you add a mobile number and agree to texts, you'll receive recurring automated tag alerts. Message frequency varies. Message and data rates may apply. Reply STOP to cancel or HELP for help. Carriers are not liable for delayed or undelivered messages.</p>
 <h2>Fair use</h2>

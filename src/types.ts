@@ -38,6 +38,9 @@ export interface Env {
   /** Filled per request from the settings table (not Worker vars). */
   PAYMENTS_READY?: boolean;
   PAYPAL_PLAN_ID?: string;
+  /** Set per request while an end-of-season sale is on: first-year price ("19.99") and the day the price goes up ("2027-03-01"). */
+  SALE_PRICE?: string;
+  SALE_ENDS?: string;
   ADMIN_TOKEN?: string;
 }
 
@@ -83,6 +86,8 @@ export interface Subscriber {
   paypal_sub?: string | null;
   /** Set when a paid plan is canceled: instant alerts continue until this time. */
   paid_until?: string | null;
+  renews_at?: string | null;
+  renewal_notice_for?: string | null;
   sms_stopped: number;
   unsubscribed_at: string | null;
   created_at: string;

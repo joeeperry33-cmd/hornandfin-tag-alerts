@@ -1,4 +1,5 @@
 import type { Env, Subscriber } from './types';
+import { sendRenewalNotice } from './notify';
 import { nowIso } from './util';
 
 /**
@@ -41,6 +42,10 @@ export interface PaypalSettings {
   price?: string; // "19.99"
   interval?: string; // "year" | "month"
   webhook_id?: string;
+  /** End-of-season sale: a second plan that charges sale_price for the first year, then the regular price. */
+  sale_plan_id?: string;
+  sale_price?: string;
+  sale_ends?: string; // YYYY-MM-DD, the first day at the regular price (midnight Pacific)
 }
 
 export async function loadPaypalSettings(env: Env): Promise<PaypalSettings> {
@@ -55,6 +60,17 @@ async function saveSetting(env: Env, name: keyof PaypalSettings, value: string):
   await env.DB.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at')
     .bind(`paypal:${paypalEnv(env)}:${name}`, value, nowIso())
     .run();
+}
+
+async function clearSetting(env: Env, name: keyof PaypalSettings): Promise<void> {
+  await env.DB.prepare('DELETE FROM settings WHERE key = ?').bind(`paypal:${paypalEnv(env)}:${name}`).run();
+}
+
+/** The sale, if one is set up and it hasn't ended. Ends at midnight Pacific (08:00 UTC) on sale_ends. */
+export function currentSale(s: PaypalSettings, now = new Date()): { planId: string; price: string; ends: string } | null {
+  if (!s.sale_plan_id || !s.sale_price || !s.sale_ends) return null;
+  if (now.getTime() >= new Date(`${s.sale_ends}T08:00:00Z`).getTime()) return null;
+  return { planId: s.sale_plan_id, price: s.sale_price, ends: s.sale_ends };
 }
 
 /** Paid plans are live only when not in the free launch period and PayPal is fully set up. */
@@ -109,9 +125,14 @@ async function api<T>(env: Env, method: string, path: string, body?: unknown): P
 }
 
 /** Create (once) the product, then a yearly (or monthly) plan at this price. New sign-ups use the newest plan. */
-export async function createPlan(env: Env, price: string, intervalIn: string = 'year'): Promise<PaypalSettings> {
+export async function createPlan(env: Env, price: string, intervalIn: string = 'year', sale?: { price: string; ends: string }): Promise<PaypalSettings> {
   const interval = asInterval(intervalIn);
   if (!/^\d{1,3}\.\d{2}$/.test(price) || Number(price) < 0.5) throw new Error('Enter a price like 3.99');
+  if (sale) {
+    if (!/^\d{1,3}\.\d{2}$/.test(sale.price) || Number(sale.price) < 0.5) throw new Error('Enter a sale price like 19.99');
+    if (Number(sale.price) >= Number(price)) throw new Error('The sale price has to be lower than the regular price.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sale.ends) || new Date(`${sale.ends}T08:00:00Z`).getTime() <= Date.now()) throw new Error('Pick a sale end date in the future.');
+  }
   const s = await loadPaypalSettings(env);
   let productId = s.product_id;
   if (!productId) {
@@ -140,9 +161,34 @@ export async function createPlan(env: Env, price: string, intervalIn: string = '
     ],
     payment_preferences: { auto_bill_outstanding: true, payment_failure_threshold: 2 },
   });
+  let salePlanId = '';
+  if (sale) {
+    const unit = interval === 'year' ? 'YEAR' : 'MONTH';
+    const sp = await api<{ id: string }>(env, 'POST', '/v1/billing/plans', {
+      product_id: productId,
+      name: `Sale: $${sale.price} first ${interval}, then $${price}/${interval}`,
+      description: `End-of-season sale: $${sale.price} for the first ${interval}, then $${price} each ${interval}`,
+      status: 'ACTIVE',
+      billing_cycles: [
+        { frequency: { interval_unit: unit, interval_count: 1 }, tenure_type: 'TRIAL', sequence: 1, total_cycles: 1, pricing_scheme: { fixed_price: { value: sale.price, currency_code: 'USD' } } },
+        { frequency: { interval_unit: unit, interval_count: 1 }, tenure_type: 'REGULAR', sequence: 2, total_cycles: 0, pricing_scheme: { fixed_price: { value: price, currency_code: 'USD' } } },
+      ],
+      payment_preferences: { auto_bill_outstanding: true, payment_failure_threshold: 2 },
+    });
+    salePlanId = sp.id;
+  }
   await saveSetting(env, 'plan_id', plan.id);
   await saveSetting(env, 'price', price);
   await saveSetting(env, 'interval', interval);
+  if (sale) {
+    await saveSetting(env, 'sale_plan_id', salePlanId);
+    await saveSetting(env, 'sale_price', sale.price);
+    await saveSetting(env, 'sale_ends', sale.ends);
+  } else {
+    await clearSetting(env, 'sale_plan_id');
+    await clearSetting(env, 'sale_price');
+    await clearSetting(env, 'sale_ends');
+  }
   return loadPaypalSettings(env);
 }
 
@@ -180,7 +226,65 @@ interface PaypalSubscription {
   status: string; // APPROVAL_PENDING | APPROVED | ACTIVE | SUSPENDED | CANCELLED | EXPIRED
   plan_id: string;
   custom_id?: string;
-  billing_info?: { next_billing_time?: string; last_payment?: { time?: string } };
+  billing_info?: {
+    next_billing_time?: string;
+    last_payment?: { time?: string };
+    cycle_executions?: { tenure_type: string; sequence: number; cycles_completed: number; total_cycles: number }[];
+  };
+}
+
+interface PaypalPlan {
+  product_id?: string;
+  billing_cycles?: { tenure_type: string; sequence: number; total_cycles: number; pricing_scheme?: { fixed_price?: { value: string } } }[];
+}
+
+/** The amount of the next charge: the first billing cycle that still has charges left. */
+export function nextChargeAmount(sub: PaypalSubscription, plan: PaypalPlan): string | null {
+  const cycles = [...(plan.billing_cycles ?? [])].sort((a, b) => a.sequence - b.sequence);
+  for (const c of cycles) {
+    const ex = sub.billing_info?.cycle_executions?.find((e) => e.sequence === c.sequence);
+    const done = ex?.cycles_completed ?? 0;
+    if (c.total_cycles === 0 || done < c.total_cycles) return c.pricing_scheme?.fixed_price?.value ?? null;
+  }
+  return null;
+}
+
+const DAY = 86_400_000;
+
+/**
+ * Daily: keep each active subscriber's renewal date current, and email a reminder about 30 days
+ * before a yearly renewal (California requires 15-45 days' notice), once per renewal.
+ */
+export async function renewalReminders(env: Env): Promise<number> {
+  if (!paypalKeysSet(env)) return 0;
+  const now = Date.now();
+  const { results } = await env.DB.prepare(
+    `SELECT * FROM subscribers WHERE tier = 'paid' AND paypal_sub IS NOT NULL AND paid_until IS NULL AND unsubscribed_at IS NULL
+     AND (renews_at IS NULL OR renews_at <= ? ) LIMIT 50`,
+  ).bind(new Date(now + 30 * DAY).toISOString()).all<Subscriber>();
+  let sent = 0;
+  for (const sub of results) {
+    try {
+      const ps = await getSubscription(env, sub.paypal_sub!);
+      const next = ps.billing_info?.next_billing_time;
+      if (ps.status !== 'ACTIVE' || !next) continue;
+      if (next !== sub.renews_at) await env.DB.prepare('UPDATE subscribers SET renews_at = ? WHERE id = ?').bind(next, sub.id).run();
+      const t = new Date(next).getTime();
+      // Only yearly renewals that are 15-30 days out, and only once per renewal date.
+      if (t - now > 30 * DAY || t - now < 15 * DAY || sub.renewal_notice_for === next) continue;
+      if (asInterval((await loadPaypalSettings(env)).interval) !== 'year') continue;
+      const plan = await api<PaypalPlan>(env, 'GET', `/v1/billing/plans/${encodeURIComponent(ps.plan_id)}`);
+      const amount = nextChargeAmount(ps, plan);
+      if (!amount) continue;
+      if (await sendRenewalNotice(env, sub, next, amount)) {
+        await env.DB.prepare('UPDATE subscribers SET renewal_notice_for = ? WHERE id = ?').bind(next, sub.id).run();
+        sent++;
+      }
+    } catch (err) {
+      console.error('renewal reminder failed', sub.id, err);
+    }
+  }
+  return sent;
 }
 
 export function getSubscription(env: Env, id: string): Promise<PaypalSubscription> {
@@ -200,9 +304,11 @@ export async function confirmApproval(env: Env, me: Subscriber, subscriptionId: 
   if (ps.custom_id !== me.id) throw new Error('That PayPal subscription belongs to a different account.');
   if (ps.status !== 'ACTIVE' && ps.status !== 'APPROVED') throw new Error(`PayPal says this subscription is ${ps.status.toLowerCase()}.`);
   const s = await loadPaypalSettings(env);
-  const plan = await api<{ product_id?: string }>(env, 'GET', `/v1/billing/plans/${encodeURIComponent(ps.plan_id)}`);
+  const plan = await api<PaypalPlan>(env, 'GET', `/v1/billing/plans/${encodeURIComponent(ps.plan_id)}`);
   if (!s.product_id || plan.product_id !== s.product_id) throw new Error('That subscription is not for Leftover Tag Alerts.');
-  await env.DB.prepare(`UPDATE subscribers SET tier = 'paid', paypal_sub = ?, paid_until = NULL WHERE id = ?`).bind(ps.id, me.id).run();
+  await env.DB.prepare(`UPDATE subscribers SET tier = 'paid', paypal_sub = ?, paid_until = NULL, renews_at = ? WHERE id = ?`)
+    .bind(ps.id, ps.billing_info?.next_billing_time ?? null, me.id)
+    .run();
 }
 
 /** Cancel at PayPal; instant alerts continue through the period already paid. */
