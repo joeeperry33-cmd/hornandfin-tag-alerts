@@ -424,6 +424,18 @@ export default {
       return res;
     }
 
+    if (path === '/admin/bd-pending') {
+      // Owner tool: show Bright Data's raw answer for a source's pending run.
+      const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!me) return redirect('/login');
+      if (!isOwner(env, me)) return new Response('not found', { status: 404 });
+      const id = url.searchParams.get('id') ?? '';
+      const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(`bd:${id}:pending`).first<{ value: string }>();
+      if (!row) return json({ error: 'no pending run' });
+      const r = await fetch(`https://api.brightdata.com/dca/dataset?id=${encodeURIComponent(row.value)}`, { headers: { authorization: `Bearer ${env.BRIGHTDATA_API_KEY}` } });
+      return json({ run: row.value, status: r.status, body: (await r.text()).slice(0, 3000) });
+    }
+
     if (path === '/admin/pdf-items') {
       // Owner tool: show the text pieces the site reads from a state PDF (to build and debug PDF readers).
       const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
