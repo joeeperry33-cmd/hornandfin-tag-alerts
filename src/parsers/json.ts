@@ -67,6 +67,7 @@ export async function fetchJsonFeed(url: string, cfg: JsonConfig, headers: Recor
     dataUrl = dataUrl.replace('{1}', encodeURIComponent(m[1]));
   }
   let cookie = '';
+  const trail: string[] = [];
   if (cfg.session) {
     // Open the report page like a visitor and keep the cookies it sets (following redirects ourselves).
     const jar = new Map<string, string>();
@@ -79,6 +80,7 @@ export async function fetchJsonFeed(url: string, cfg: JsonConfig, headers: Recor
         if (m) jar.set(m[1], m[2]);
       }
       const loc = r.status >= 300 && r.status < 400 ? r.headers.get('location') : null;
+      trail.push(`${r.status}${loc ? `→${loc.split('?')[0]}` : ''}`);
       next = loc ? new URL(loc, next).toString() : null;
       if (!loc) await r.arrayBuffer().catch(() => undefined);
     }
@@ -89,7 +91,10 @@ export async function fetchJsonFeed(url: string, cfg: JsonConfig, headers: Recor
     redirect: cfg.session ? 'manual' : 'follow',
     signal: AbortSignal.timeout(25000),
   });
-  if (res.status >= 300 && res.status < 400) throw new Error(`Data feed redirected to ${res.headers.get('location') ?? 'another page'} (needs a session or login)`);
+  if (res.status >= 300 && res.status < 400) {
+    const names = cookie ? cookie.split('; ').map((c) => c.split('=')[0]).join(', ') : 'none';
+    throw new Error(`Data feed redirected to ${(res.headers.get('location') ?? 'another page').split('?')[0]} (needs a session or login; page ${trail.join(' ') || 'not loaded'}, cookies: ${names})`);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status} from the data feed`);
   const listings = listingsFromJson(await res.json(), cfg);
   const canonical = listings
