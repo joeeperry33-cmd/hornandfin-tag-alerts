@@ -11,7 +11,7 @@ export const STATES: Record<string, string> = {
   WI: 'Wisconsin', WY: 'Wyoming',
 };
 
-export const SPECIES = ['elk', 'deer', 'pronghorn', 'moose', 'sheep', 'goat', 'bear', 'turkey', 'other'];
+export const SPECIES = ['elk', 'deer', 'pronghorn', 'moose', 'sheep', 'goat', 'bear', 'turkey', 'javelina', 'other'];
 
 /** Launch period: everyone gets instant alerts free. */
 export function isIntro(env: { INTRO_FREE?: string }): boolean {
@@ -88,7 +88,8 @@ export function parseList(input: unknown, allowed: string[], upper: boolean): st
   const raw = Array.isArray(input) ? input : String(input).split(',');
   const clean = [...new Set(raw.map((s) => String(s).trim()).map((s) => (upper ? s.toUpperCase() : s.toLowerCase())))]
     .filter((s) => allowed.includes(s));
-  return clean.length ? clean.join(',') : '*';
+  // Everything ticked means "all", so species added later are included automatically.
+  return clean.length && clean.length < allowed.length ? clean.join(',') : '*';
 }
 
 export function matchesList(list: string, value: string | null): boolean {

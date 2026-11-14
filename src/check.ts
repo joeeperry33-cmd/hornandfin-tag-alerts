@@ -230,6 +230,7 @@ const KNOWN_SPECIES: Record<string, string> = {
   elk: 'elk', deer: 'deer', 'mule deer': 'deer', whitetail: 'deer', 'white-tailed deer': 'deer',
   pronghorn: 'pronghorn', antelope: 'pronghorn', moose: 'moose', 'bighorn sheep': 'sheep', sheep: 'sheep',
   'mountain goat': 'goat', goat: 'goat', bear: 'bear', 'black bear': 'bear', turkey: 'turkey',
+  javelina: 'javelina', peccary: 'javelina',
 };
 
 /** Map a page's species text ("Mule Deer", "Antelope") onto our species keys. */

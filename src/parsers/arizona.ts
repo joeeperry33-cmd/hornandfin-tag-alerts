@@ -18,7 +18,8 @@ function speciesOf(heading: string): string {
   if (/\bbear\b/.test(h)) return 'bear';
   if (/turkey/.test(h)) return 'turkey';
   if (/bighorn|sheep/.test(h)) return 'sheep';
-  return 'other'; // javelina, bison, sandhill crane...
+  if (/javelina|peccary/.test(h)) return 'javelina';
+  return 'other'; // bison, sandhill crane...
 }
 
 function facetsOf(heading: string): TagFacets {

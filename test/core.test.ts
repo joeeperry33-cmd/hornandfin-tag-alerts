@@ -471,7 +471,7 @@ describe('Arizona leftover PDF', () => {
     expect(l[1].label).toContain('unit 16A (EXCLUDING MOHAVE COUNTY PARK LANDS)');
     expect(l[0].weapon).toBe('any');
     expect(l[2].weapon).toBe('muzzleloader');
-    expect(l[2].species).toBe('other');
+    expect(l[2].species).toBe('javelina');
   });
   it('reads Bright Data rows and waits while a run is going', () => {
     expect(pdfLinksFromDataset({ status: 'building' })).toBeNull();
