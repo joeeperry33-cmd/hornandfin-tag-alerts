@@ -28,6 +28,8 @@ export interface JsonConfig {
   titleCase?: boolean;
   /** Load the page first and send its cookies with the data request (feeds that need a visitor session). */
   session?: boolean;
+  /** Extra headers for the data request, e.g. {"x-requested-with":"ReactCall"} (only x-* and content-type). */
+  headers?: Record<string, string>;
   /** Field with the hunt's last day (MM/DD/YYYY or ISO); hunts already over are skipped. */
   endField?: string;
 }
@@ -79,6 +81,15 @@ export function listingsFromJson(data: unknown, cfg: JsonConfig, now = Date.now(
   return out;
 }
 
+function extraHeaders(h: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(h ?? {})) {
+    const name = k.toLowerCase();
+    if ((name.startsWith('x-') || name === 'content-type') && typeof v === 'string') out[name] = v;
+  }
+  return out;
+}
+
 export async function fetchJsonFeed(url: string, cfg: JsonConfig, headers: Record<string, string>): Promise<{ status: number; result: ParseResult }> {
   let dataUrl = cfg.dataUrl;
   if (cfg.discover) {
@@ -109,7 +120,7 @@ export async function fetchJsonFeed(url: string, cfg: JsonConfig, headers: Recor
     cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
   }
   const res = await fetch(new URL(dataUrl, url).toString(), {
-    headers: { ...headers, accept: 'application/json', referer: url, ...(cookie ? { cookie } : {}), 'x-requested-with': 'XMLHttpRequest' },
+    headers: { ...headers, accept: 'application/json', referer: url, ...(cookie ? { cookie } : {}), 'x-requested-with': 'XMLHttpRequest', ...extraHeaders(cfg.headers) },
     redirect: cfg.session ? 'manual' : 'follow',
     signal: AbortSignal.timeout(25000),
   });
