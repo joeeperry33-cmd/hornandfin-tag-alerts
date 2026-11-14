@@ -119,7 +119,7 @@ export async function costReport(env: Env, days = 30): Promise<CostReport> {
     const yr = active ? yearRuns(src, now) : 0;
     const todayRuns = active ? runsOn(src, now) : 0;
     const base = { id: src.id, state: src.state, name: src.name, active };
-    if (src.parser === 'apify') {
+    if (src.parser === 'apify' || src.parser === 'apify_pdf') {
       const task = String(cfg(src).task ?? '');
       let runs = 0;
       let spent = 0;

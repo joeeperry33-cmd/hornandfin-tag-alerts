@@ -126,8 +126,11 @@ export interface HomeData {
   recent: { state: string; title: string; link_url: string; created_at: string; opening: string | null }[];
 }
 
+/** The public site and feed lag paid alerts by a week, so only subscribers can act on openings. */
+export const PUBLIC_DELAY_DAYS = 7;
+
 export async function loadHomeData(env: Env): Promise<HomeData> {
-  const delay = new Date(Date.now() - 12 * 3600_000).toISOString();
+  const delay = new Date(Date.now() - PUBLIC_DELAY_DAYS * 86400_000).toISOString();
   const [watched, inactive, last, recent] = await Promise.all([
     env.DB.prepare('SELECT state, name FROM sources WHERE active = 1 ORDER BY state, name').all<{ state: string; name: string }>(),
     env.DB.prepare('SELECT DISTINCT state FROM sources WHERE active = 0 AND state NOT IN (SELECT state FROM sources WHERE active = 1)').all<{ state: string }>(),
@@ -253,7 +256,7 @@ function heroTag(data: HomeData): string {
     return `<div class="tag-hang"><div class="string" aria-hidden="true"></div><div class="tag" role="img" aria-label="Most recent opening: ${escapeHtml(real.title)}">
 <div class="issuer">${escapeHtml((STATES[real.state] ?? real.state).toUpperCase())} BIG GAME</div>
 <dl><dt>OPENING</dt><dd>${escapeHtml(real.title.replace(/^[^:]+:\s*/, ''))}</dd>${real.opening && OPENING_LABEL[real.opening as Opening] ? `<dt>TYPE</dt><dd>${OPENING_LABEL[real.opening as Opening]}</dd>` : ''}<dt>POSTED</dt><dd>${escapeHtml(timeAgo(real.created_at))}</dd></dl>
-<div class="stamp">JUST OPENED</div></div></div><p class="tag-note">Our most recent public alert. Subscribers got it 12 hours earlier.</p>`;
+<div class="stamp">OPENED</div></div></div><p class="tag-note">An opening from last week. Subscribers got it the moment it posted.</p>`;
   }
   return `<div class="tag-hang"><div class="string" aria-hidden="true"></div><div class="tag" role="img" aria-label="Example alert: 3 elk tags open in Utah hunt EB3010">
 <div class="issuer">UTAH BIG GAME</div>
@@ -327,7 +330,7 @@ export function homePage(env: Env, data: HomeData): Response {
   const speciesBoxes = SPECIES.map((s) => `<label><input type="checkbox" name="species" value="${s}" checked> ${SPECIES_LABEL[s] ?? s}</label>`).join('');
 
   const recent = data.recent.length
-    ? `<section class="recent"><div class="wrap"><h2>Recent openings</h2><p class="muted">Shown here 12 hours after subscribers get them.</p><ul>${data.recent
+    ? `<section class="recent"><div class="wrap"><h2>Last week's openings</h2><p class="muted">Shown here a week after subscribers get them. Leftover tags often sell out within hours, so <a href="#signup">subscribe</a> to hear about them right away.</p><ul>${data.recent
         .map((e) => `<li><a href="${escapeHtml(e.link_url)}" rel="nofollow noopener">${escapeHtml(e.title)}</a><time datetime="${e.created_at}">${timeAgo(e.created_at)}</time></li>`)
         .join('')}</ul></div></section>`
     : '';

@@ -45,7 +45,7 @@ function label(src: Pick<Source, 'state' | 'name'>): string {
 /** What the owner should look at, by how the source is read. */
 export function fixHint(src: Pick<Source, 'parser'>, error: string): string {
   if (/BRIGHTDATA_API_KEY|APIFY_TOKEN/.test(error)) return 'A key is missing in Cloudflare (Workers & Pages → leftover-tag-alerts → Settings → Variables and Secrets).';
-  if (src.parser === 'apify') return 'Open the Apify task, check its last run and log. A 401 means the Apify token changed; a 403 in the log means the state is blocking the proxy (try the residential proxy).';
+  if (src.parser === 'apify' || src.parser === 'apify_pdf') return 'Open the Apify task, check its last run and log. A 401 means the Apify token changed; a 403 in the log means the state is blocking the proxy (try the residential proxy).';
   if (src.parser === 'brightdata_pdf') return 'Open the azgfd.com scraper in Bright Data and check its last run. A 401 means the Bright Data key changed; "No data" means the leftover section moved on the page.';
   if (src.parser === 'snapshot') return 'The Colorado list is copied by a browser on your computer: make sure the computer is on with the Claude app open and the scheduled tasks are running.';
   if (/403|blocked|denied|captcha|just a moment/i.test(error)) return 'The state site is refusing automated checks. It may need a scraper (Apify or Bright Data) like the other blocked states.';

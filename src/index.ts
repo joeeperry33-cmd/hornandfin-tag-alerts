@@ -5,7 +5,7 @@ import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
 import { costsPage, loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
-import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
+import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, PUBLIC_DELAY_DAYS, robotsTxt, sitemapXml, termsPage } from './site';
 import { verifyTwilioSignature } from './twilio';
 import {
   cancelSubscription,
@@ -239,7 +239,7 @@ async function smsInbound(env: Env, req: Request): Promise<Response> {
 async function feed(env: Env, url: URL, req: Request): Promise<Response> {
   const state = (url.searchParams.get('state') ?? '').toUpperCase();
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') ?? '20', 10) || 20, 1), 100);
-  const delayHours = 12; // public feed lags so paid alerts keep their head start
+  const delayHours = PUBLIC_DELAY_DAYS * 24; // public feed lags a week so only paid alerts are useful
   const before = new Date(Date.now() - delayHours * 3600_000).toISOString();
   const q = STATES[state]
     ? env.DB.prepare('SELECT id, state, species, title, detail, link_url, created_at FROM events WHERE kind <> \'page_changed\' AND state = ? AND created_at <= ? ORDER BY created_at DESC LIMIT ?').bind(state, before, limit)

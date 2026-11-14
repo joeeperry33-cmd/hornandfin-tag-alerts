@@ -2,7 +2,7 @@ import { parseChange, type ChangeConfig } from './parsers/change';
 import { parseLinks, type LinksConfig } from './parsers/links';
 import { fetchFormReports, type FormConfig } from './parsers/form';
 import { fetchJsonFeed, type JsonConfig } from './parsers/json';
-import { checkBrightDataPdfs, type BrightDataConfig } from './parsers/brightdata';
+import { checkApifyPdfs, checkBrightDataPdfs, type ApifyPdfConfig, type BrightDataConfig } from './parsers/brightdata';
 import { checkApifyTask, type ApifyConfig } from './parsers/apify';
 import { noteEmptyList, noteFailure, noteSuccess } from './health';
 import { coloradoRunDate, parseColorado } from './parsers/colorado';
@@ -301,6 +301,11 @@ export async function readSource(env: Env, src: Source): Promise<{ status: numbe
   } else if (src.parser === 'brightdata_pdf') {
     // State page blocks automated checks: the owner's Bright Data scraper finds the PDFs, we read them.
     const report = await checkBrightDataPdfs(env, src.id, JSON.parse(src.parser_config ?? '{}') as BrightDataConfig);
+    status = report.status;
+    parsed = report.result;
+  } else if (src.parser === 'apify_pdf') {
+    // Same, but the owner's Apify task finds the PDFs.
+    const report = await checkApifyPdfs(env, src.id, JSON.parse(src.parser_config ?? '{}') as ApifyPdfConfig);
     status = report.status;
     parsed = report.result;
   } else if (src.parser === 'form' || src.parser === 'json') {

@@ -140,12 +140,16 @@ export async function checkBrightDataPdfs(env: Env, sourceId: string, cfg: Brigh
   const ageHours = (Date.now() - new Date(saved.updated_at).getTime()) / 3600_000;
   if (ageHours > (cfg.staleHours ?? 72)) throw new Error(`Bright Data list of PDFs is ${Math.round(ageHours)} hours old${runError ? ` (${String(runError)})` : ''}`);
 
-  const links = JSON.parse(saved.value) as PdfLink[];
+  return readPdfLinks(env, JSON.parse(saved.value) as PdfLink[], cfg.reader);
+}
+
+/** Download each listed PDF and read it into listings. */
+async function readPdfLinks(env: Env, links: PdfLink[], reader: BrightDataConfig['reader']): Promise<{ status: number; result: ParseResult }> {
   const listings: ParsedListing[] = [];
   for (const link of links) {
     const url = allowedPdfUrl(link.url);
     if (!url) continue;
-    listings.push(...(await readPdfListings(cfg.reader, await fetchPdf(url, env.USER_AGENT))));
+    listings.push(...(await readPdfListings(reader, await fetchPdf(url, env.USER_AGENT))));
   }
   const byKey = new Map(listings.map((l) => [l.key, l]));
   const merged = [...byKey.values()];
@@ -154,4 +158,37 @@ export async function checkBrightDataPdfs(env: Env, sourceId: string, cfg: Brigh
     .sort()
     .join('\n');
   return { status: 200, result: { hash: await sha256(canonical), listings: merged } };
+}
+
+/** Same as above, but an Apify task finds the PDF links (it answers within the check, no waiting). */
+export interface ApifyPdfConfig {
+  task: string;
+  reader: BrightDataConfig['reader'];
+}
+
+export async function checkApifyPdfs(env: Env, sourceId: string, cfg: ApifyPdfConfig): Promise<{ status: number; result: ParseResult }> {
+  if (!env.APIFY_TOKEN) throw new Error('APIFY_TOKEN is not set in Cloudflare');
+  const key = `bd:${sourceId}:pdfs`; // shared with the Bright Data version, so switching keeps the last good list
+  let runError: unknown = null;
+  try {
+    const res = await fetch(`https://api.apify.com/v2/actor-tasks/${encodeURIComponent(cfg.task)}/run-sync-get-dataset-items?timeout=240&clean=true&format=json`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${env.APIFY_TOKEN}`, 'content-type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(270_000),
+    });
+    if (!res.ok) throw new Error(`Apify task: HTTP ${res.status}`);
+    const pages = (await res.json()) as { rows?: { title?: string; url?: string }[] }[];
+    if (!Array.isArray(pages) || !pages.length) throw new Error('Apify task returned no data');
+    const links = pdfLinksFromDataset(pages.flatMap((p) => p.rows ?? [])) ?? [];
+    // An empty result can mean the page changed; keep the last good list then.
+    if (links.length) await putSetting(env, key, JSON.stringify(links));
+  } catch (err) {
+    runError = err;
+  }
+  const saved = await getSetting(env, key);
+  if (!saved) throw runError ?? new Error('No PDF links found yet');
+  const ageHours = (Date.now() - new Date(saved.updated_at).getTime()) / 3600_000;
+  if (runError && ageHours > 72) throw new Error(`PDF list is ${Math.round(ageHours)} hours old (${String(runError)})`);
+  return readPdfLinks(env, JSON.parse(saved.value) as PdfLink[], cfg.reader);
 }
