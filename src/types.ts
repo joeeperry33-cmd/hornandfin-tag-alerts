@@ -1,5 +1,7 @@
 export interface Env {
   DB: D1Database;
+  /** This same Worker, so scheduled checks can run in the US-placed request handler. */
+  SELF?: Fetcher;
   SITE_NAME: string;
   SITE_URL: string;
   API_URL: string;

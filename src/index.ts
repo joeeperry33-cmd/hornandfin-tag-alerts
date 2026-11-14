@@ -304,6 +304,7 @@ export default {
       return Response.redirect(url.toString(), 301);
     }
 
+    if (path === '/internal/run-checks' && req.method === 'POST') return internalRunChecks(env, req);
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(env, req) });
     if (path === '/widget.js') return widgetJs(env);
     if (path === '/api/subscribe' && req.method === 'POST') return subscribe(env, req);
@@ -565,8 +566,48 @@ export default {
       );
       return;
     }
+    // Scheduled runs can start in a data center anywhere in the world, and some state sites refuse
+    // visitors from outside the US. Hand the checks to this Worker's request handler, which runs in
+    // the US (see [placement] in wrangler.toml); run them here only if that hand-off fails.
+    if (await runChecksInUs(env)) return;
     const result = await runChecks(env);
     const sent = await sendInstantAlerts(env);
     console.log(`checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
   },
 };
+
+const RUN_TOKEN_KEY = 'internal:run-token';
+
+/** Ask the US-placed copy of this Worker to run the checks. True when it did. */
+async function runChecksInUs(env: Env): Promise<boolean> {
+  if (!env.SELF) return false;
+  try {
+    const token = randomToken(24);
+    await env.DB.prepare(
+      'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+    )
+      .bind(RUN_TOKEN_KEY, token, nowIso())
+      .run();
+    const res = await env.SELF.fetch('https://internal/internal/run-checks', { method: 'POST', headers: { 'x-run-token': token } });
+    const body = await res.text();
+    console.log(`checks ran in the US-placed handler: ${res.status} ${body.slice(0, 200)}`);
+    return res.ok;
+  } catch (err) {
+    console.error('US hand-off failed, checking here instead', err);
+    return false;
+  }
+}
+
+/** The scheduled job's hand-off. Only a one-time token the job just stored in the database opens it. */
+async function internalRunChecks(env: Env, req: Request): Promise<Response> {
+  const given = req.headers.get('x-run-token') ?? '';
+  const row = await env.DB.prepare('SELECT value, updated_at FROM settings WHERE key = ?').bind(RUN_TOKEN_KEY).first<{ value: string; updated_at: string }>();
+  const fresh = row && Date.now() - new Date(row.updated_at).getTime() < 120_000;
+  if (!given || !row || !fresh || given !== row.value) return new Response('Not found', { status: 404 });
+  await env.DB.prepare('DELETE FROM settings WHERE key = ?').bind(RUN_TOKEN_KEY).run();
+  const result = await runChecks(env);
+  const sent = await sendInstantAlerts(env);
+  const placed = req.headers.get('cf-placement') ?? 'unknown';
+  console.log(`[${placed}] checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
+  return Response.json({ placed, ...result, emails: sent.emails, sms: sent.sms });
+}

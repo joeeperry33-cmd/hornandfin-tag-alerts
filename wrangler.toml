@@ -16,6 +16,16 @@ workers_dev = true
 [triggers]
 crons = ["*/15 * * * *", "30 14 * * *"]
 
+# Run in the central US. State wildlife sites are US-only audiences and some refuse visitors from
+# other countries; scheduled checks are handed to the request handler (through SELF) so they run here too.
+[placement]
+region = "gcp:us-central1"
+
+# This Worker itself, so the scheduled job can hand checks to the US-placed request handler.
+[[services]]
+binding = "SELF"
+service = "leftover-tag-alerts"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "leftover-tag-alerts"
