@@ -517,3 +517,21 @@ describe('owner source alerts', () => {
     expect(fixHint({ parser: 'table' }, 'HTTP 403 from cloudflare')).toMatch(/refusing/);
   });
 });
+
+describe('JSON feeds with composite keys', () => {
+  it('reads New Jersey style rows', () => {
+    const data = { Data: [
+      { SpeciesName: 'Deer', HuntCode: 'DMZ5', HuntZoneName: '5', Season: 'Deer - Permit Shotgun', Period: '', LeftoverAvailable: 8058 },
+      { SpeciesName: 'Deer', HuntCode: 'DMZ5', HuntZoneName: '5', Season: 'Deer - Permit Bow', Period: '', LeftoverAvailable: 0 },
+      { SpeciesName: 'Bear', HuntCode: 'B3', HuntZoneName: '3', Season: 'Bear - Permit', Period: '', LeftoverAvailable: 2145 },
+    ] };
+    const l = listingsFromJson(data, { dataUrl: '', items: 'Data', key: '{HuntCode}|{Season}|{Period}', quantity: 'LeftoverAvailable', label: '{Season}, zone {HuntZoneName} {Period}', speciesField: 'SpeciesName' });
+    expect(l.map((x) => [x.key, x.quantity, x.species])).toEqual([['DMZ5|Deer - Permit Shotgun|', 8058, 'deer'], ['B3|Bear - Permit|', 2145, 'bear']]);
+    expect(l[0].weapon).toBe('rifle');
+  });
+  it('reads Illinois array rows and skips "-"', () => {
+    const data = { data: [['FIREARM', 'ADAMS', '2272', '901'], ['MUZZLELOADER', 'COOK', '-', '-']] };
+    const l = listingsFromJson(data, { dataUrl: '', items: 'data', key: '{0}|{1}', quantity: '2', label: 'Leftover {0} deer permit, {1} County, either sex', requireQuantity: true, species: 'deer' });
+    expect(l.map((x) => [x.key, x.quantity])).toEqual([['FIREARM|ADAMS', 2272]]);
+  });
+});

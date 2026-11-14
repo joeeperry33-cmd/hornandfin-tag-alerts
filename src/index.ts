@@ -1,7 +1,7 @@
 import { allowedPdfUrl, fetchPdf, pdfItems } from './pdftext';
 import { readPdfListings } from './parsers/brightdata';
 import { dailyHealth } from './health';
-import { runChecks } from './check';
+import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
 import { loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
@@ -438,6 +438,34 @@ export default {
         );
       } catch {
         return json({ ok: false, problem: 'Database unavailable' }, 503, { 'cache-control': 'no-store' });
+      }
+    }
+
+    if (path === '/admin/source-preview') {
+      // Owner tool: read a source now without saving. Optional overrides let a new source be tried
+      // before it is added: url, parser, format, config (JSON).
+      const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!me) return redirect('/login');
+      if (!isOwner(env, me)) return new Response('not found', { status: 404 });
+      const q = url.searchParams;
+      const base = (await env.DB.prepare('SELECT * FROM sources WHERE id = ?').bind(q.get('id') ?? '').first<Source>()) ?? ({
+        id: 'preview', state: 'XX', name: 'Preview', url: '', link_url: null, format: 'html', parser: 'change', parser_config: null,
+        species: null, check_minutes: 60, season_start: null, season_end: null, notes: null, active: 0, last_hash: null,
+        last_checked: null, last_changed: null, last_status: null, fail_count: 0, last_error: null, opening: 'leftover', rush: null,
+      } as unknown as Source);
+      const src = {
+        ...base,
+        url: q.get('url') ?? base.url,
+        parser: (q.get('parser') ?? base.parser) as Source['parser'],
+        format: q.get('format') ?? base.format,
+        parser_config: q.get('config') ?? base.parser_config,
+      } as Source;
+      try {
+        const { status, parsed } = await readSource(env, src);
+        const l = parsed.listings ?? [];
+        return json({ status, hash: parsed.hash, count: l.length, sample: l.slice(0, 40) });
+      } catch (err) {
+        return json({ error: String(err instanceof Error ? err.message : err) }, 502);
       }
     }
 

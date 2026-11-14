@@ -18,8 +18,12 @@ export interface JsonConfig {
   /** Label template with {Field} placeholders, e.g. "WMU {Name}". */
   label?: string;
   species?: string;
+  /** Field holding the species per row (e.g. "SpeciesName"); overrides species. */
+  speciesField?: string;
   defaults?: TagFacets;
   skipZero?: boolean;
+  /** Skip rows whose count isn't a number ("-" for no quota). */
+  requireQuantity?: boolean;
 }
 
 function at(obj: unknown, path: string): unknown {
@@ -30,15 +34,20 @@ export function listingsFromJson(data: unknown, cfg: JsonConfig): ParsedListing[
   const items = at(data, cfg.items);
   if (!Array.isArray(items)) throw new Error(`feed has no list at "${cfg.items}"`);
   const out: ParsedListing[] = [];
+  const fill = (tpl: string, it: Record<string, unknown>) => tpl.replace(/\{(\w+)\}/g, (_, f) => String(it[f] ?? '').trim());
   for (const it of items as Record<string, unknown>[]) {
-    const key = String(it[cfg.key] ?? '').trim();
-    if (!key) continue;
+    // key is a field name, or a template like "{HuntCode}|{Season}" when one field isn't unique.
+    const key = (cfg.key.includes('{') ? fill(cfg.key, it) : String(it[cfg.key] ?? '')).trim();
+    if (!key || /^\|*$/.test(key)) continue;
     const raw = it[cfg.quantity];
-    const quantity = typeof raw === 'number' ? raw : raw != null && /^-?\d+$/.test(String(raw)) ? parseInt(String(raw), 10) : null;
+    const quantity =
+      typeof raw === 'number' ? raw : raw != null && /^-?[\d,]+$/.test(String(raw).trim()) ? parseInt(String(raw).replace(/,/g, ''), 10) : null;
     if ((cfg.skipZero ?? true) && quantity !== null && quantity <= 0) continue;
-    const label = (cfg.label ?? `{${cfg.key}}`).replace(/\{(\w+)\}/g, (_, f) => String(it[f] ?? ''));
+    if (cfg.requireQuantity && quantity === null) continue;
+    const label = fill(cfg.label ?? `{${cfg.key}}`, it).replace(/\s+/g, ' ');
     const facets = mergeFacets(classify(label), cfg.defaults);
-    out.push({ key, label, species: cfg.species, quantity, weapon: facets.weapon ?? null, sex: facets.sex ?? null, residency: facets.residency ?? null });
+    const species = cfg.speciesField ? String(it[cfg.speciesField] ?? '').toLowerCase().trim() || cfg.species : cfg.species;
+    out.push({ key, label, species, quantity, weapon: facets.weapon ?? null, sex: facets.sex ?? null, residency: facets.residency ?? null });
   }
   return out;
 }

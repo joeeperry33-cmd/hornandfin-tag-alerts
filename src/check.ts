@@ -245,50 +245,59 @@ export function normalizeSpecies(raw: string | undefined): string | null {
 }
 
 
+/** Fetch and read one source without saving anything (used by checks and the owner preview). */
+export async function readSource(env: Env, src: Source): Promise<{ status: number; parsed: ParseResult }> {
+  let status = 0;
+  let parsed: ParseResult;
+  if (src.parser === 'snapshot') {
+    // Text copied from the state's page by a browser on the owner's computer (see migrations/0013).
+    const cfg = JSON.parse(src.parser_config ?? '{}') as { staleHours?: number };
+    const snap = await env.DB.prepare('SELECT body, captured_at FROM snapshots WHERE source_id = ?')
+      .bind(src.id)
+      .first<{ body: string; captured_at: string }>();
+    if (!snap) throw new Error('No browser snapshot yet');
+    const ageHours = (Date.now() - new Date(snap.captured_at).getTime()) / 3600_000;
+    if (ageHours > (cfg.staleHours ?? 6)) {
+      throw new Error(`Browser snapshot is ${Math.round(ageHours)} hours old (last list run ${coloradoRunDate(snap.body) ?? 'unknown'}); is the computer on with the Claude app open?`);
+    }
+    status = 200;
+    parsed = await parseColorado(snap.body);
+  } else if (src.parser === 'apify') {
+    // State page blocks automated checks: run the owner's Apify task and read its rows.
+    const report = await checkApifyTask(env, JSON.parse(src.parser_config ?? '{}') as ApifyConfig);
+    status = report.status;
+    parsed = report.result;
+  } else if (src.parser === 'brightdata_pdf') {
+    // State page blocks automated checks: the owner's Bright Data scraper finds the PDFs, we read them.
+    const report = await checkBrightDataPdfs(env, src.id, JSON.parse(src.parser_config ?? '{}') as BrightDataConfig);
+    status = report.status;
+    parsed = report.result;
+  } else if (src.parser === 'form' || src.parser === 'json') {
+    if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('disallowed by robots.txt');
+    const headers = { 'user-agent': env.USER_AGENT, 'accept-language': 'en-US,en;q=0.9' };
+    const report =
+      src.parser === 'form'
+        ? await fetchFormReports(src.url, JSON.parse(src.parser_config ?? '{}') as FormConfig, headers)
+        : await fetchJsonFeed(src.url, JSON.parse(src.parser_config ?? '{}') as JsonConfig, headers);
+    status = report.status;
+    parsed = report.result;
+  } else {
+    const fetched = await fetchSource(env, src);
+    status = fetched.status;
+    if (!fetched.body) throw new Error(`HTTP ${fetched.status}`);
+    parsed = await parseSource(src, fetched.body);
+  }
+  return { status, parsed };
+}
+
 /** Check one source; returns how many alert events it created. */
 export async function checkSource(env: Env, src: Source): Promise<number> {
   const ts = nowIso();
   let status = 0;
   try {
-    let parsed: ParseResult;
-    if (src.parser === 'snapshot') {
-      // Text copied from the state's page by a browser on the owner's computer (see migrations/0013).
-      const cfg = JSON.parse(src.parser_config ?? '{}') as { staleHours?: number };
-      const snap = await env.DB.prepare('SELECT body, captured_at FROM snapshots WHERE source_id = ?')
-        .bind(src.id)
-        .first<{ body: string; captured_at: string }>();
-      if (!snap) throw new Error('No browser snapshot yet');
-      const ageHours = (Date.now() - new Date(snap.captured_at).getTime()) / 3600_000;
-      if (ageHours > (cfg.staleHours ?? 6)) {
-        throw new Error(`Browser snapshot is ${Math.round(ageHours)} hours old (last list run ${coloradoRunDate(snap.body) ?? 'unknown'}); is the computer on with the Claude app open?`);
-      }
-      status = 200;
-      parsed = await parseColorado(snap.body);
-    } else if (src.parser === 'apify') {
-      // State page blocks automated checks: run the owner's Apify task and read its rows.
-      const report = await checkApifyTask(env, JSON.parse(src.parser_config ?? '{}') as ApifyConfig);
-      status = report.status;
-      parsed = report.result;
-    } else if (src.parser === 'brightdata_pdf') {
-      // State page blocks automated checks: the owner's Bright Data scraper finds the PDFs, we read them.
-      const report = await checkBrightDataPdfs(env, src.id, JSON.parse(src.parser_config ?? '{}') as BrightDataConfig);
-      status = report.status;
-      parsed = report.result;
-    } else if (src.parser === 'form' || src.parser === 'json') {
-      if (!(await robotsAllows(src.url, env.USER_AGENT))) throw new Error('disallowed by robots.txt');
-      const headers = { 'user-agent': env.USER_AGENT, 'accept-language': 'en-US,en;q=0.9' };
-      const report =
-        src.parser === 'form'
-          ? await fetchFormReports(src.url, JSON.parse(src.parser_config ?? '{}') as FormConfig, headers)
-          : await fetchJsonFeed(src.url, JSON.parse(src.parser_config ?? '{}') as JsonConfig, headers);
-      status = report.status;
-      parsed = report.result;
-    } else {
-      const fetched = await fetchSource(env, src);
-      status = fetched.status;
-      if (!fetched.body) throw new Error(`HTTP ${fetched.status}`);
-      parsed = await parseSource(src, fetched.body);
-    }
+    const read = await readSource(env, src);
+    status = read.status;
+    const parsed = read.parsed;
     const baseline = !src.last_hash;
     const changed = !baseline && parsed.hash !== src.last_hash;
     let events = 0;
