@@ -1,3 +1,4 @@
+import { allowedPdfUrl, fetchPdf, pdfItems } from './pdftext';
 import { runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
@@ -420,6 +421,21 @@ export default {
       const res = path.endsWith('.csv') ? subscribersCsv(results) : subscribersPage(env, results);
       res.headers.set('cache-control', 'no-store');
       return res;
+    }
+
+    if (path === '/admin/pdf-items') {
+      // Owner tool: show the text pieces the site reads from a state PDF (to build and debug PDF readers).
+      const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!me) return redirect('/login');
+      if (!isOwner(env, me)) return new Response('not found', { status: 404 });
+      const target = allowedPdfUrl(url.searchParams.get('url') ?? '');
+      if (!target) return json({ error: 'Only state agency PDF hosts are allowed.' }, 400);
+      try {
+        const items = await pdfItems(await fetchPdf(target, env.USER_AGENT));
+        return json({ count: items.length, items });
+      } catch (err) {
+        return json({ error: String(err instanceof Error ? err.message : err) }, 502);
+      }
     }
 
     if (path.startsWith('/admin')) {
