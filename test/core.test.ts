@@ -535,6 +535,20 @@ describe('JSON feeds with composite keys', () => {
     const l = listingsFromJson(data, { dataUrl: '', items: 'data', key: '{0}|{1}', quantity: '2', label: 'Leftover {0} deer permit, {1} County, either sex', requireQuantity: true, species: 'deer' });
     expect(l.map((x) => [x.key, x.quantity])).toEqual([['FIREARM|ADAMS', 2272]]);
   });
+  it('reads Florida quota hunts: available + reissued, skipping hunts already over', () => {
+    const data = [
+      { DisplayName: 'Tates Hell - Still Hunt Area', EventDisplayID: '1029', StartDate: '01/22/2027', EndDate: '01/24/2027', AvailableQuota: 0, ReissueQuota: 2 },
+      { DisplayName: 'Plank Road', EventDisplayID: '8100', StartDate: '12/04/2026', EndDate: '12/06/2026', AvailableQuota: 3, ReissueQuota: 1 },
+      { DisplayName: 'Dinner Island Ranch', EventDisplayID: '1177', StartDate: '10/02/2026', EndDate: '10/04/2026', AvailableQuota: 0, ReissueQuota: 5 },
+      { DisplayName: 'Andrews', EventDisplayID: '1036', StartDate: '11/20/2026', EndDate: '11/22/2026', AvailableQuota: 0, ReissueQuota: 0 },
+    ];
+    const l = listingsFromJson(
+      data,
+      { dataUrl: '', items: '', key: 'EventDisplayID', quantity: 'AvailableQuota+ReissueQuota', label: 'General gun quota hunt, {DisplayName} ({StartDate}–{EndDate})', species: 'deer', endField: 'EndDate' },
+      Date.UTC(2026, 10, 13),
+    );
+    expect(l.map((x) => [x.key, x.quantity])).toEqual([['1029', 2], ['8100', 4]]);
+  });
 });
 
 describe('tidyCaps', () => {

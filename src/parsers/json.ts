@@ -28,13 +28,31 @@ export interface JsonConfig {
   titleCase?: boolean;
   /** Load the page first and send its cookies with the data request (feeds that need a visitor session). */
   session?: boolean;
+  /** Field with the hunt's last day (MM/DD/YYYY or ISO); hunts already over are skipped. */
+  endField?: string;
+}
+
+/** "01/22/2027" or "2027-01-22" → that day's end (UTC, a few hours of slack for US time zones), or null. */
+export function endOfDay(raw: unknown): number | null {
+  const s = String(raw ?? '').trim();
+  let m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+  if (m) return Date.UTC(+m[3], +m[1] - 1, +m[2], 23, 59) + 10 * 3600_000;
+  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3], 23, 59) + 10 * 3600_000;
+  return null;
+}
+
+function count(raw: unknown): number | null {
+  if (typeof raw === 'number') return raw;
+  return raw != null && /^-?[\d,]+$/.test(String(raw).trim()) ? parseInt(String(raw).replace(/,/g, ''), 10) : null;
 }
 
 function at(obj: unknown, path: string): unknown {
+  if (!path || path === '.') return obj; // the feed is the list itself
   return path.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined), obj);
 }
 
-export function listingsFromJson(data: unknown, cfg: JsonConfig): ParsedListing[] {
+export function listingsFromJson(data: unknown, cfg: JsonConfig, now = Date.now()): ParsedListing[] {
   const items = at(data, cfg.items);
   if (!Array.isArray(items)) throw new Error(`feed has no list at "${cfg.items}"`);
   const out: ParsedListing[] = [];
@@ -43,9 +61,13 @@ export function listingsFromJson(data: unknown, cfg: JsonConfig): ParsedListing[
     // key is a field name, or a template like "{HuntCode}|{Season}" when one field isn't unique.
     const key = (cfg.key.includes('{') ? fill(cfg.key, it) : String(it[cfg.key] ?? '')).trim();
     if (!key || /^\|*$/.test(key)) continue;
-    const raw = it[cfg.quantity];
-    const quantity =
-      typeof raw === 'number' ? raw : raw != null && /^-?[\d,]+$/.test(String(raw).trim()) ? parseInt(String(raw).replace(/,/g, ''), 10) : null;
+    if (cfg.endField) {
+      const end = endOfDay(it[cfg.endField]);
+      if (end !== null && end < now) continue;
+    }
+    // quantity is a field, or fields to add up: "AvailableQuota+ReissueQuota".
+    const parts = cfg.quantity.split('+').map((f) => count(it[f.trim()]));
+    const quantity = parts.every((q) => q === null) ? null : parts.reduce<number>((a, q) => a + (q ?? 0), 0);
     if ((cfg.skipZero ?? true) && quantity !== null && quantity <= 0) continue;
     if (cfg.requireQuantity && quantity === null) continue;
     let label = fill(cfg.label ?? `{${cfg.key}}`, it).replace(/\s+/g, ' ').trim();
