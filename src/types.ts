@@ -13,6 +13,8 @@ export interface Env {
   PUBLIC_LOCATION?: string;
   /** Comma-separated emails that can open /admin/subscribers after signing in. */
   ADMIN_EMAILS?: string;
+  /** Where source-failure alerts go (defaults to ADMIN_EMAILS). */
+  OWNER_ALERT_EMAIL?: string;
   /** Google Analytics 4 measurement ID (G-XXXXXXX). Public pages only. */
   GA_MEASUREMENT_ID?: string;
   /** TikTok Pixel ID for ad measurement. Public pages plus the post-subscribe page. */

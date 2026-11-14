@@ -3,6 +3,7 @@ import { fetchFormReports, type FormConfig } from './parsers/form';
 import { fetchJsonFeed, type JsonConfig } from './parsers/json';
 import { checkBrightDataPdfs, type BrightDataConfig } from './parsers/brightdata';
 import { checkApifyTask, type ApifyConfig } from './parsers/apify';
+import { noteEmptyList, noteFailure, noteSuccess } from './health';
 import { coloradoRunDate, parseColorado } from './parsers/colorado';
 import { parseTable, type TableConfig } from './parsers/table';
 import { robotsAllows } from './robots';
@@ -293,6 +294,10 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
     let events = 0;
 
     if (parsed.listings) {
+      if (!baseline && changed && parsed.listings.length === 0) {
+        const prev = await env.DB.prepare('SELECT COUNT(*) AS n FROM listings WHERE source_id = ? AND gone_at IS NULL').bind(src.id).first<{ n: number }>();
+        await noteEmptyList(env, src, prev?.n ?? 0).catch((e) => console.error('health email failed', e));
+      }
       if (baseline || changed) events = await applyListings(env, src, parsed.listings, baseline);
     } else if (changed) {
       const stateName = STATES[src.state] ?? src.state;
@@ -315,6 +320,7 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
     )
       .bind(parsed.hash, ts, status, changed ? 1 : 0, ts, src.id)
       .run();
+    if (src.fail_count > 0) await noteSuccess(env, src).catch((e) => console.error('health email failed', e));
     return events;
   } catch (err) {
     if (err instanceof HttpError) status = err.status;
@@ -323,6 +329,7 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
     await env.DB.prepare('UPDATE sources SET last_checked = ?, last_status = ?, last_error = ?, fail_count = fail_count + 1 WHERE id = ?')
       .bind(ts, status, message, src.id)
       .run();
+    await noteFailure(env, src, message, src.fail_count + 1).catch((e) => console.error('health email failed', e));
     return 0;
   }
 }

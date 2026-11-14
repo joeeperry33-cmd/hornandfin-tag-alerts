@@ -1,5 +1,6 @@
 import { allowedPdfUrl, fetchPdf, pdfItems } from './pdftext';
 import { readPdfListings } from './parsers/brightdata';
+import { dailyHealth } from './health';
 import { runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
@@ -424,6 +425,15 @@ export default {
       return res;
     }
 
+    if (path === '/admin/health-report') {
+      // Owner tool: send the daily source health email now (sends nothing when every source is fine).
+      const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!me) return redirect('/login');
+      if (!isOwner(env, me)) return new Response('not found', { status: 404 });
+      const n = await dailyHealth(env);
+      return json({ sources_needing_attention: n, emailed: n > 0 });
+    }
+
     if (path === '/admin/bd-pending') {
       // Owner tool: show Bright Data's raw answer for a source's pending run.
       const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
@@ -502,6 +512,8 @@ export default {
       ctx.waitUntil(
         expirePaidPlans(env)
           .then((n) => n && console.log(`paid plans ended: ${n}`))
+          .then(() => dailyHealth(env))
+          .then((n) => n && console.log(`sources needing attention: ${n}`))
           .then(() => renewalReminders(env))
           .then((n) => n && console.log(`renewal reminders sent: ${n}`))
           .then(() => sendDigests(env))

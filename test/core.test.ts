@@ -1,4 +1,5 @@
 import { currentSale, nextChargeAmount } from '../src/paypal';
+import { fixHint } from '../src/health';
 import { listingsFromApify, soldOutZones } from '../src/parsers/apify';
 import { arizonaListings } from '../src/parsers/arizona';
 import { parseDatasetBody, pdfLinksFromDataset } from '../src/parsers/brightdata';
@@ -505,5 +506,14 @@ describe('Bright Data result formats', () => {
     expect(pdfLinksFromDataset(parseDatasetBody(JSON.stringify([row, row])))).toHaveLength(2);
     expect(pdfLinksFromDataset(parseDatasetBody(JSON.stringify(row) + '\n' + JSON.stringify(row)))).toHaveLength(2);
     expect(pdfLinksFromDataset(parseDatasetBody('{"status":"building"}'))).toBeNull();
+  });
+});
+
+describe('owner source alerts', () => {
+  it('points at the right fix', () => {
+    expect(fixHint({ parser: 'apify' }, 'Apify task: HTTP 401')).toMatch(/Apify/);
+    expect(fixHint({ parser: 'brightdata_pdf' }, 'x')).toMatch(/Bright Data/);
+    expect(fixHint({ parser: 'json' }, 'APIFY_TOKEN is not set in Cloudflare')).toMatch(/Cloudflare/);
+    expect(fixHint({ parser: 'table' }, 'HTTP 403 from cloudflare')).toMatch(/refusing/);
   });
 });
