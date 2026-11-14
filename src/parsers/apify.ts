@@ -62,11 +62,11 @@ export function listingsFromApify(items: unknown, cfg: ApifyConfig) {
 
 export async function checkApifyTask(env: Env, cfg: ApifyConfig): Promise<{ status: number; result: ParseResult }> {
   if (!env.APIFY_TOKEN) throw new Error('APIFY_TOKEN is not set in Cloudflare');
-  const res = await fetch(`https://api.apify.com/v2/actor-tasks/${encodeURIComponent(cfg.task)}/run-sync-get-dataset-items?timeout=120&clean=true&format=json`, {
+  const res = await fetch(`https://api.apify.com/v2/actor-tasks/${encodeURIComponent(cfg.task)}/run-sync-get-dataset-items?timeout=240&clean=true&format=json`, {
     method: 'POST',
     headers: { authorization: `Bearer ${env.APIFY_TOKEN}`, 'content-type': 'application/json' },
     body: '{}',
-    signal: AbortSignal.timeout(150_000),
+    signal: AbortSignal.timeout(270_000),
   });
   if (!res.ok) throw new Error(`Apify task: HTTP ${res.status}`);
   const listings = listingsFromApify(await res.json(), cfg);
