@@ -16,6 +16,8 @@ export interface LinksConfig {
   exclude?: string;
   /** Only read links after this text on the page (case-insensitive). */
   start?: string;
+  /** Use the file name in the address as the label (for links that all say "View" or "PDF"). */
+  labelFromHref?: boolean;
   /** Text put before each link's text in alerts, e.g. "News release:". */
   labelPrefix?: string;
   species?: string;
@@ -24,6 +26,12 @@ export interface LinksConfig {
 
 function plain(s: string): string {
   return decodeEntities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+/** ".../undersubscribed-2026-unit-22.pdf" → "undersubscribed 2026 unit 22". */
+function fileLabel(href: string): string {
+  const name = decodeURIComponent(new URL(href).pathname.split('/').pop() ?? '').replace(/\.[a-z0-9]+$/i, '');
+  return name.replace(/[-_]+/g, ' ').trim();
 }
 
 export function linksFromHtml(html: string, baseUrl: string, cfg: LinksConfig): ParsedListing[] {
@@ -48,11 +56,13 @@ export function linksFromHtml(html: string, baseUrl: string, cfg: LinksConfig): 
       continue;
     }
     if (!/^https?:/.test(href) || !text) continue;
+    if (href === baseUrl.replace(/#.*$/, '')) continue; // the page linking to itself (menus, "skip to content")
     if (!match.test(text) && !match.test(href)) continue;
     if (hrefMatch && !hrefMatch.test(href)) continue;
     if (exclude && (exclude.test(text) || exclude.test(href))) continue;
     if (out.has(href)) continue;
-    const label = `${cfg.labelPrefix ? `${cfg.labelPrefix.trimEnd()} ` : ''}${text}`.slice(0, 240);
+    const shown = cfg.labelFromHref ? fileLabel(href) || text : text;
+    const label = `${cfg.labelPrefix ? `${cfg.labelPrefix.trimEnd()} ` : ''}${shown}`.slice(0, 240);
     const facets = mergeFacets(classify(text), cfg.defaults);
     out.set(href, { key: href, label, species: cfg.species, quantity: null, weapon: facets.weapon ?? null, sex: facets.sex ?? null, residency: facets.residency ?? null });
   }

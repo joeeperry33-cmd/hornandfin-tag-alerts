@@ -192,7 +192,8 @@ async function applyListings(env: Env, src: Source, current: ParsedListing[], ba
   for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
   // First time this source yields rows (new source, or table parsing just started working):
   // record them quietly instead of announcing every existing hunt as "new".
-  if (baseline || results.length === 0) return 0;
+  // News-style sources are often empty for months; their first post after the baseline is the alert.
+  if (baseline || (results.length === 0 && src.parser !== 'links')) return 0;
 
   const stateName = STATES[src.state] ?? src.state;
   const opening = sourceOpening(src);
