@@ -1,4 +1,5 @@
 import { parseChange, type ChangeConfig } from './parsers/change';
+import { parseLinks, type LinksConfig } from './parsers/links';
 import { fetchFormReports, type FormConfig } from './parsers/form';
 import { fetchJsonFeed, type JsonConfig } from './parsers/json';
 import { checkBrightDataPdfs, type BrightDataConfig } from './parsers/brightdata';
@@ -89,6 +90,7 @@ export async function parseSource(src: Source, body: ArrayBuffer): Promise<Parse
       throw new Error(`Hunt table not readable: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  if (src.parser === 'links') return parseLinks(body, src.url, cfg as LinksConfig);
   return parseChange(body, src.format, cfg as ChangeConfig);
 }
 
@@ -199,10 +201,15 @@ async function applyListings(env: Env, src: Source, current: ParsedListing[], ba
   // One alert per change. Each hunt is stored as an item with its own species and tag type, and
   // every subscriber's email lists only the hunts that match their settings.
   if (diff.added.length) {
+    // News-style sources (a new release or list link) read as an announcement, not a hunt.
     const title =
-      diff.added.length === 1
-        ? `${stateName}: ${describe(diff.added[0])} just opened up`
-        : `${stateName}: ${diff.added.length} hunts just opened up on the ${src.name}`;
+      src.parser === 'links'
+        ? diff.added.length === 1
+          ? `${stateName}: ${diff.added[0].label}`
+          : `${stateName}: ${diff.added.length} new leftover-tag posts on the ${src.name}`
+        : diff.added.length === 1
+          ? `${stateName}: ${describe(diff.added[0])} just opened up`
+          : `${stateName}: ${diff.added.length} hunts just opened up on the ${src.name}`;
     const shown = diff.added.slice(0, MAX_LISTINGS_PER_EVENT).map(describe);
     const more = diff.added.length - shown.length;
     const id = await insertEvent(env, src, 'new_listing', title, shown.join('\n') + (more > 0 ? `\n…and ${more} more` : ''), speciesOf(diff.added, src), opening, defaults);

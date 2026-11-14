@@ -558,3 +558,18 @@ describe('tidyCaps', () => {
     expect(tidyCaps('zone 4S, DMZ5')).toBe('zone 4S, DMZ5');
   });
 });
+
+import { linksFromHtml } from '../src/parsers/links';
+describe('links reader', () => {
+  it('keeps matching links once, absolute, without excluded ones', () => {
+    const html = `<ul><li><a href="/twra/news/2026/8/17/leftover-2026-wma-hunt--waterfowl-blind-permits-available.html">Leftover 2026 WMA Hunt &amp; Waterfowl Blind Permits Available</a></li>
+      <li><a href="/twra/news/2026/8/1/trout.html">Trout stocking update</a></li>
+      <li><a href="/twra/news/2026/8/17/leftover-2026-wma-hunt--waterfowl-blind-permits-available.html#x">Leftover 2026 WMA Hunt</a></li>
+      <li><a href="/twra/news/2026/6/1/leftover-fishing.html">Leftover fishing licenses</a></li></ul>`;
+    const l = linksFromHtml(html, 'https://www.tn.gov/twra/news.html', { match: 'leftover', exclude: 'fishing', labelPrefix: 'TWRA news:' });
+    expect(l.map((x) => [x.key, x.label])).toEqual([
+      ['https://www.tn.gov/twra/news/2026/8/17/leftover-2026-wma-hunt--waterfowl-blind-permits-available.html', 'TWRA news: Leftover 2026 WMA Hunt & Waterfowl Blind Permits Available'],
+    ]);
+    expect(l[0].quantity).toBeNull();
+  });
+});
