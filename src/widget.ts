@@ -1,5 +1,5 @@
 import type { Env } from './types';
-import { isIntro, priceSentence, regularPrice, saleOn, SPECIES, STATES } from './util';
+import { isIntro, priceSentence, regularPrice, saleOn, SPECIES, SPECIES_LABEL, STATES } from './util';
 
 /**
  * Embeddable sign-up form for other sites (e.g. Horn & Fin). Paste into a WordPress Custom HTML block:
@@ -11,7 +11,7 @@ import { isIntro, priceSentence, regularPrice, saleOn, SPECIES, STATES } from '.
 export function widgetJs(env: Env): Response {
   const states = Object.entries(STATES);
   const js = `(function(){
-var API=${JSON.stringify(env.API_URL)};var STATES=${JSON.stringify(states)};var SPECIES=${JSON.stringify(SPECIES)};
+var API=${JSON.stringify(env.API_URL)};var STATES=${JSON.stringify(states)};var SPECIES=${JSON.stringify(SPECIES)};var SPL=${JSON.stringify(SPECIES_LABEL)};
 function el(t,a,h){var e=document.createElement(t);for(var k in a||{})e.setAttribute(k,a[k]);if(h!=null)e.innerHTML=h;return e;}
 function mount(root){if(root.dataset.mounted)return;root.dataset.mounted='1';
 var pre=(root.dataset.states||'').toUpperCase().split(',').filter(Boolean);
@@ -25,7 +25,7 @@ var css='.ltaw{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 '.ltaw .hp{position:absolute;left:-9999px}';
 root.appendChild(el('style',{},css));
 var box=el('form',{class:'ltaw',novalidate:''});
-var sp=SPECIES.map(function(s){return '<label><input type=checkbox name=species value="'+s+'" checked> '+s[0].toUpperCase()+s.slice(1)+'</label>';}).join('');
+var sp=SPECIES.map(function(s){return '<label><input type=checkbox name=species value="'+s+'" checked> '+(SPL[s]||s)+'</label>';}).join('');
 var st=STATES.map(function(s){return '<label><input type=checkbox name=states value="'+s[0]+'"'+(pre.length&&pre.indexOf(s[0])<0?'':' checked')+'> '+s[1]+'</label>';}).join('');
 box.innerHTML='<h3>Leftover and returned tag alerts</h3><p>Get an email when states post leftover, returned or reissued big game tags. ${isIntro(env) ? `Free during launch, then ${env.PAID_PRICE_LABEL.replace('/year', ' a year')} for instant alerts.` : (saleOn(env) ? `End-of-season sale: ${priceSentence(env)}.` : `Instant alerts for ${regularPrice(env)}.`)} From <a href="${env.SITE_URL}" target="_blank" rel="noopener">Leftover Tag Alerts</a>.</p>'+
 '<input type=email name=email placeholder="you@example.com" autocomplete=email required aria-label="Email">'+

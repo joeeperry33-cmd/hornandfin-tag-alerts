@@ -12,6 +12,10 @@ export const STATES: Record<string, string> = {
 };
 
 export const SPECIES = ['elk', 'deer', 'pronghorn', 'moose', 'sheep', 'goat', 'bear', 'turkey', 'javelina', 'other'];
+export const SPECIES_LABEL: Record<string, string> = {
+  elk: 'Elk', deer: 'Deer', pronghorn: 'Pronghorn', moose: 'Moose', sheep: 'Bighorn sheep', goat: 'Mountain goat',
+  bear: 'Bear', turkey: 'Turkey', javelina: 'Javelina', other: 'Other',
+};
 
 /** Launch period: everyone gets instant alerts free. */
 export function isIntro(env: { INTRO_FREE?: string }): boolean {

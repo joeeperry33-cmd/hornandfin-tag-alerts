@@ -1,6 +1,6 @@
 import { OPENING_LABEL, type Opening } from './tagtype';
 import type { Env } from './types';
-import { escapeHtml, isIntro, priceSentence, regularPrice, saleEndsText, saleOn, SPECIES, STATES, textsEnabled } from './util';
+import { escapeHtml, isIntro, priceSentence, regularPrice, saleEndsText, saleOn, SPECIES, SPECIES_LABEL, STATES, textsEnabled } from './util';
 
 /*
  * Leftover Tag Alerts site design
@@ -324,7 +324,7 @@ export function homePage(env: Env, data: HomeData): Response {
     .sort((a, b) => a[1].localeCompare(b[1]))
     .map(([code, name]) => `<label><input type="checkbox" name="states" value="${code}" checked> ${escapeHtml(name)}</label>`)
     .join('');
-  const speciesBoxes = SPECIES.map((s) => `<label><input type="checkbox" name="species" value="${s}" checked> ${s[0].toUpperCase() + s.slice(1)}</label>`).join('');
+  const speciesBoxes = SPECIES.map((s) => `<label><input type="checkbox" name="species" value="${s}" checked> ${SPECIES_LABEL[s] ?? s}</label>`).join('');
 
   const recent = data.recent.length
     ? `<section class="recent"><div class="wrap"><h2>Recent openings</h2><p class="muted">Shown here 12 hours after subscribers get them.</p><ul>${data.recent
@@ -373,7 +373,7 @@ ${recent}
 
 <section id="questions" class="faq"><div class="wrap"><h2>Questions</h2>
 <details><summary>Do leftover tags cost me points?</summary><p>It depends on the state. Colorado leftovers need no preference points, but Colorado reissues of hunts that took 5 or more points do use them. In Utah, buying a limited-entry deer or elk permit forfeits your bonus points. Every alert links to the state's page; check its rules before you buy.</p></details>
-<details><summary>Can nonresidents buy them?</summary><p>Usually. Some states hold leftovers for residents first, such as New Mexico for the first 24 hours. The state's own page has the final word.</p></details>
+<details><summary>Can nonresidents buy them?</summary><p>Usually. Some lists are for one group only, such as Kansas's leftover deer permits, which are for nonresidents. Every alert says whether nonresidents can buy the tag when the state lists it, and the state's own page has the final word.</p></details>
 <details><summary>Do you sell tags?</summary><p>No. Tags are sold only by each state's wildlife agency. We tell you when they open up and link you to the state's license site.</p></details>
 <details><summary>How fast are instant alerts?</summary><p>We check each state list as often as every 15 minutes during its season and send instant alerts right after a change is found. Some states only update their lists once a day or once a week, so an alert can't come sooner than the state posts.</p></details>
 <details><summary>Can I get only certain kinds of tags?</summary><p>Yes. Every alert shows each hunt's tag type: leftover, returned or reissued, the weapon, antlered or antlerless, and whether nonresidents can buy it. In your settings you can choose which of those you want and set your home state to skip tags you can't buy. When a state doesn't say, you still get the alert.</p></details>

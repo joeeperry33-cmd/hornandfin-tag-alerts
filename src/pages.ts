@@ -1,6 +1,6 @@
 import { shell, tiktokTag } from './site';
 import type { Env, Subscriber } from './types';
-import { chargeToday, escapeHtml, isIntro, priceSentence, saleEndsText, saleOn, SPECIES, STATES, textsEnabled } from './util';
+import { chargeToday, escapeHtml, isIntro, priceSentence, saleEndsText, saleOn, SPECIES, SPECIES_LABEL, STATES, textsEnabled } from './util';
 
 const APP_CSS = `
 .sale-tag{display:inline-block;background:var(--blaze);color:#fff;font:800 12px/1 var(--display);letter-spacing:.08em;text-transform:uppercase;padding:6px 9px;margin:0 0 6px}
@@ -54,7 +54,7 @@ export function managePage(
         ? '<div class="notice" role="status">Saved.</div>'
         : '';
   const states = Object.entries(STATES).sort((a, b) => a[1].localeCompare(b[1]));
-  const species = SPECIES.map((s) => [s, s[0].toUpperCase() + s.slice(1)] as [string, string]);
+  const species = SPECIES.map((s) => [s, SPECIES_LABEL[s] ?? s] as [string, string]);
 
   const intro = isIntro(env);
   const phoneFields = textsEnabled(env)
