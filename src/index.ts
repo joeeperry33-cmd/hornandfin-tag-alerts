@@ -432,8 +432,14 @@ export default {
       const id = url.searchParams.get('id') ?? '';
       const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(`bd:${id}:pending`).first<{ value: string }>();
       if (!row) return json({ error: 'no pending run' });
-      const r = await fetch(`https://api.brightdata.com/dca/dataset?id=${encodeURIComponent(row.value)}`, { headers: { authorization: `Bearer ${env.BRIGHTDATA_API_KEY}` } });
-      return json({ run: row.value, status: r.status, body: (await r.text()).slice(0, 3000) });
+      const out: Record<string, unknown> = { run: row.value };
+      for (const q of ['', '&format=json']) {
+        const r = await fetch(`https://api.brightdata.com/dca/dataset?id=${encodeURIComponent(row.value)}${q}`, {
+          headers: { authorization: `Bearer ${env.BRIGHTDATA_API_KEY}`, 'content-type': 'application/json' },
+        });
+        out[q || 'plain'] = { status: r.status, body: (await r.text()).slice(0, 1500) };
+      }
+      return json(out);
     }
 
     if (path === '/admin/pdf-items') {
