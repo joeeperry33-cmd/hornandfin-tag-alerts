@@ -1,7 +1,7 @@
 import { currentSale, nextChargeAmount } from '../src/paypal';
 import { listingsFromApify, soldOutZones } from '../src/parsers/apify';
 import { arizonaListings } from '../src/parsers/arizona';
-import { pdfLinksFromDataset } from '../src/parsers/brightdata';
+import { parseDatasetBody, pdfLinksFromDataset } from '../src/parsers/brightdata';
 import { chargeToday, priceSentence, saleEndsText } from '../src/util';
 import { describe, expect, it } from 'vitest';
 import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
@@ -495,5 +495,15 @@ describe('Apify Massachusetts zones', () => {
     expect(l[0].label).toBe('Surplus antlerless deer permit, zone 10');
     expect(l[0].sex).toBe('antlerless');
     expect([...soldOutZones('ZONES 1, 4S, 5, and 8 ARE SOLD OUT.')]).toEqual(['1', '4S', '5', '8']);
+  });
+});
+
+describe('Bright Data result formats', () => {
+  const row = { title: 'Leftover permit-tags', url: 'https://azgfd-live-portal-wordpress-pantheon.s3.us-west-2.amazonaws.com/wp-content/uploads/2026/11/09054518/2027-S-FCFS-11_9_26.pdf' };
+  it('reads one object, an array, or one object per line', () => {
+    expect(pdfLinksFromDataset(parseDatasetBody(JSON.stringify(row) + '\n'))).toHaveLength(1);
+    expect(pdfLinksFromDataset(parseDatasetBody(JSON.stringify([row, row])))).toHaveLength(2);
+    expect(pdfLinksFromDataset(parseDatasetBody(JSON.stringify(row) + '\n' + JSON.stringify(row)))).toHaveLength(2);
+    expect(pdfLinksFromDataset(parseDatasetBody('{"status":"building"}'))).toBeNull();
   });
 });

@@ -43,11 +43,16 @@ function zoneId(v: unknown): string {
 
 export function listingsFromApify(items: unknown, cfg: ApifyConfig) {
   if (!Array.isArray(items) || !items.length) throw new Error('Apify task returned no data');
-  const page = items[0] as Record<string, unknown>;
-  const rows = page[cfg.items];
-  if (!Array.isArray(rows)) throw new Error(`Apify data has no list at "${cfg.items}"`);
-  const soldOut = cfg.soldOutField ? soldOutZones(page[cfg.soldOutField]) : new Set<string>();
-  const clean = (rows as Record<string, unknown>[]).map((r) => {
+  // One item per page the task loaded; combine their rows.
+  const rows: Record<string, unknown>[] = [];
+  const soldOut = new Set<string>();
+  for (const page of items as Record<string, unknown>[]) {
+    const list = page[cfg.items];
+    if (!Array.isArray(list)) throw new Error(`Apify data has no list at "${cfg.items}"`);
+    rows.push(...(list as Record<string, unknown>[]));
+    if (cfg.soldOutField) for (const z of soldOutZones(page[cfg.soldOutField])) soldOut.add(z);
+  }
+  const clean = rows.map((r) => {
     let q = permitCount(r[cfg.quantity]);
     if (soldOut.has(zoneId(r[cfg.key]))) q = 0;
     return { ...r, [cfg.quantity]: q };

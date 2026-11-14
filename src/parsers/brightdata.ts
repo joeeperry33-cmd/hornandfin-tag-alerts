@@ -50,6 +50,24 @@ function authHeaders(env: Env): Record<string, string> {
   return { authorization: `Bearer ${env.BRIGHTDATA_API_KEY}`, 'content-type': 'application/json' };
 }
 
+/** Bright Data answers with a JSON array, one object, or one JSON object per line. */
+export function parseDatasetBody(text: string): unknown {
+  const t = text.trim();
+  if (!t) return [];
+  try {
+    const v = JSON.parse(t);
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === 'object' && 'status' in v && !('url' in v)) return v;
+    return [v];
+  } catch {
+    return t
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+  }
+}
+
 /** The scraper's rows, or null while the run is still going. */
 export function pdfLinksFromDataset(data: unknown): PdfLink[] | null {
   if (!Array.isArray(data)) {
@@ -70,7 +88,7 @@ async function collectPending(env: Env, sourceId: string): Promise<void> {
   const pendingKey = `bd:${sourceId}:pending`;
   const pending = await getSetting(env, pendingKey);
   if (!pending) return;
-  const res = await fetch(`${API}/dataset?id=${encodeURIComponent(pending.value)}`, { headers: authHeaders(env), signal: AbortSignal.timeout(20000) });
+  const res = await fetch(`${API}/dataset?id=${encodeURIComponent(pending.value)}&format=json`, { headers: authHeaders(env), signal: AbortSignal.timeout(20000) });
   if (res.status === 202) {
     // Still running; give up on a run that has been going for over 6 hours.
     if (Date.now() - new Date(pending.updated_at).getTime() > 6 * 3600_000) await putSetting(env, pendingKey, null);
@@ -80,7 +98,7 @@ async function collectPending(env: Env, sourceId: string): Promise<void> {
     await putSetting(env, pendingKey, null);
     throw new Error(`Bright Data result: HTTP ${res.status}`);
   }
-  const links = pdfLinksFromDataset(await res.json());
+  const links = pdfLinksFromDataset(parseDatasetBody(await res.text()));
   if (links === null) return;
   await putSetting(env, pendingKey, null);
   // An empty result can mean the scraper failed to find the section; keep the last good list then.
