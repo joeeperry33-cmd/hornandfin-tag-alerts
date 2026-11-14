@@ -1,5 +1,5 @@
 import { classify, mergeFacets, type TagFacets } from '../tagtype';
-import { sha256 } from '../util';
+import { sha256, tidyCaps } from '../util';
 import type { ParsedListing, ParseResult } from '../types';
 
 /**
@@ -24,6 +24,10 @@ export interface JsonConfig {
   skipZero?: boolean;
   /** Skip rows whose count isn't a number ("-" for no quota). */
   requireQuantity?: boolean;
+  /** Turn ALL-CAPS names into normal capitalization in labels. */
+  titleCase?: boolean;
+  /** Load the page first and send its cookies with the data request (feeds that need a visitor session). */
+  session?: boolean;
 }
 
 function at(obj: unknown, path: string): unknown {
@@ -44,7 +48,8 @@ export function listingsFromJson(data: unknown, cfg: JsonConfig): ParsedListing[
       typeof raw === 'number' ? raw : raw != null && /^-?[\d,]+$/.test(String(raw).trim()) ? parseInt(String(raw).replace(/,/g, ''), 10) : null;
     if ((cfg.skipZero ?? true) && quantity !== null && quantity <= 0) continue;
     if (cfg.requireQuantity && quantity === null) continue;
-    const label = fill(cfg.label ?? `{${cfg.key}}`, it).replace(/\s+/g, ' ');
+    let label = fill(cfg.label ?? `{${cfg.key}}`, it).replace(/\s+/g, ' ').trim();
+    if (cfg.titleCase) label = tidyCaps(label);
     const facets = mergeFacets(classify(label), cfg.defaults);
     const species = cfg.speciesField ? String(it[cfg.speciesField] ?? '').toLowerCase().trim() || cfg.species : cfg.species;
     out.push({ key, label, species, quantity, weapon: facets.weapon ?? null, sex: facets.sex ?? null, residency: facets.residency ?? null });
@@ -61,10 +66,30 @@ export async function fetchJsonFeed(url: string, cfg: JsonConfig, headers: Recor
     if (!m) throw new Error('Could not find the current season on the page');
     dataUrl = dataUrl.replace('{1}', encodeURIComponent(m[1]));
   }
+  let cookie = '';
+  if (cfg.session) {
+    // Open the report page like a visitor and keep the cookies it sets (following redirects ourselves).
+    const jar = new Map<string, string>();
+    let next: string | null = url;
+    for (let hop = 0; next && hop < 5; hop++) {
+      const r: Response = await fetch(next, { headers: { ...headers, cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; ') }, redirect: 'manual', signal: AbortSignal.timeout(25000) });
+      const list = (r.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ?? [r.headers.get('set-cookie') ?? ''];
+      for (const c of list) {
+        const m = /^\s*([^=;\s]+)=([^;]*)/.exec(c);
+        if (m) jar.set(m[1], m[2]);
+      }
+      const loc = r.status >= 300 && r.status < 400 ? r.headers.get('location') : null;
+      next = loc ? new URL(loc, next).toString() : null;
+      if (!loc) await r.arrayBuffer().catch(() => undefined);
+    }
+    cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
+  }
   const res = await fetch(new URL(dataUrl, url).toString(), {
-    headers: { ...headers, accept: 'application/json' },
+    headers: { ...headers, accept: 'application/json', referer: url, ...(cookie ? { cookie } : {}), 'x-requested-with': 'XMLHttpRequest' },
+    redirect: cfg.session ? 'manual' : 'follow',
     signal: AbortSignal.timeout(25000),
   });
+  if (res.status >= 300 && res.status < 400) throw new Error(`Data feed redirected to ${res.headers.get('location') ?? 'another page'} (needs a session or login)`);
   if (!res.ok) throw new Error(`HTTP ${res.status} from the data feed`);
   const listings = listingsFromJson(await res.json(), cfg);
   const canonical = listings

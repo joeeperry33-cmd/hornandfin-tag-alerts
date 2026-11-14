@@ -1,3 +1,4 @@
+import { tidyCaps } from '../util';
 import { classify, mergeFacets, type TagFacets } from '../tagtype';
 import { decodeEntities, sha256 } from '../util';
 import type { ParsedListing, ParseResult } from '../types';
@@ -31,6 +32,8 @@ export interface TableConfig {
   /** Put in front of every key and label, e.g. the species when one source covers several reports. */
   keyPrefix?: string;
   labelPrefix?: string;
+  /** Turn ALL-CAPS names into normal capitalization in labels. */
+  titleCase?: boolean;
 }
 
 const MAX_LABEL = 140;
@@ -108,7 +111,8 @@ export function listingsFromTable(table: Table, cfg: TableConfig): ParsedListing
       .map((i) => strip.reduce((t, re) => t.replace(re, ''), row[i] ?? '').trim())
       .filter(Boolean)
       .join(' – ');
-    if (cfg.labelPrefix) label = `${cfg.labelPrefix} ${label}`;
+    if (cfg.titleCase) label = tidyCaps(label);
+    if (cfg.labelPrefix) label = `${cfg.labelPrefix.trimEnd()} ${label.trim()}`;
     if (label.length > MAX_LABEL) label = label.slice(0, MAX_LABEL - 1).trimEnd() + '…';
     const species = spIdx >= 0 ? (row[spIdx] ?? '').toLowerCase() : cfg.species;
     // Tag type: read from the whole row (hunt name, weapon, season columns), then fall back to the list's defaults.

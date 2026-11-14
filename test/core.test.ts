@@ -1,4 +1,5 @@
 import { currentSale, nextChargeAmount } from '../src/paypal';
+import { tidyCaps } from '../src/util';
 import { fixHint } from '../src/health';
 import { listingsFromApify, soldOutZones } from '../src/parsers/apify';
 import { arizonaListings } from '../src/parsers/arizona';
@@ -533,5 +534,13 @@ describe('JSON feeds with composite keys', () => {
     const data = { data: [['FIREARM', 'ADAMS', '2272', '901'], ['MUZZLELOADER', 'COOK', '-', '-']] };
     const l = listingsFromJson(data, { dataUrl: '', items: 'data', key: '{0}|{1}', quantity: '2', label: 'Leftover {0} deer permit, {1} County, either sex', requireQuantity: true, species: 'deer' });
     expect(l.map((x) => [x.key, x.quantity])).toEqual([['FIREARM|ADAMS', 2272]]);
+  });
+});
+
+describe('tidyCaps', () => {
+  it('fixes all-caps names but keeps codes', () => {
+    expect(tidyCaps('Leftover FIREARM deer permit, ADAMS County')).toBe('Leftover Firearm deer permit, Adams County');
+    expect(tidyCaps('BROWN COUNTY METRO SUB-UNIT')).toBe('Brown County Metro Sub-Unit');
+    expect(tidyCaps('zone 4S, DMZ5')).toBe('zone 4S, DMZ5');
   });
 });

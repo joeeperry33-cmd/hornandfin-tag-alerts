@@ -146,3 +146,8 @@ export function chargeToday(env: PriceEnv): number {
   if (saleOn(env)) return Number(env.SALE_PRICE);
   return Number(/\$(\d+(?:\.\d{2})?)/.exec(env.PAID_PRICE_LABEL)?.[1] ?? '0');
 }
+
+/** "ADAMS COUNTY METRO SUB-UNIT" -> "Adams County Metro Sub-Unit"; leaves codes like 4S, DMZ5, EF005O3R alone. */
+export function tidyCaps(s: string): string {
+  return s.replace(/\b[A-Z][A-Z'-]{2,}\b/g, (w) => (/\d/.test(w) ? w : w[0] + w.slice(1).toLowerCase().replace(/-([a-z])/g, (_, c) => '-' + c.toUpperCase())));
+}
