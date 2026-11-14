@@ -28,6 +28,8 @@ export interface JsonConfig {
   titleCase?: boolean;
   /** Load the page first and send its cookies with the data request (feeds that need a visitor session). */
   session?: boolean;
+  /** Pages the site's own script calls on load before the feed (they can set guest cookies); relative to the source URL. */
+  warmup?: string[];
   /** Extra headers for the data request, e.g. {"x-requested-with":"ReactCall"} (only x-* and content-type). */
   headers?: Record<string, string>;
   /** Field with the hunt's last day (MM/DD/YYYY or ISO); hunts already over are skipped. */
@@ -116,6 +118,23 @@ export async function fetchJsonFeed(url: string, cfg: JsonConfig, headers: Recor
       trail.push(`${r.status}${loc ? `→${loc.split('?')[0]}` : ''}`);
       next = loc ? new URL(loc, next).toString() : null;
       if (!loc) await r.arrayBuffer().catch(() => undefined);
+    }
+    // Then the calls the page's own script makes on load, which can hand out a guest session.
+    for (const path of cfg.warmup ?? []) {
+      const target = new URL(path, url);
+      if (target.origin !== new URL(url).origin) continue;
+      const r: Response = await fetch(target.toString(), {
+        headers: { ...headers, accept: 'application/json', referer: url, cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; '), 'x-requested-with': 'XMLHttpRequest', ...extraHeaders(cfg.headers) },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(25000),
+      });
+      const list = (r.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ?? [r.headers.get('set-cookie') ?? ''];
+      for (const c of list) {
+        const m = /^\s*([^=;\s]+)=([^;]*)/.exec(c);
+        if (m) jar.set(m[1], m[2]);
+      }
+      trail.push(`${target.pathname.split('/').pop()}:${r.status}`);
+      await r.arrayBuffer().catch(() => undefined);
     }
     cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
   }
