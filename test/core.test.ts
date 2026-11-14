@@ -1,4 +1,6 @@
 import { currentSale, nextChargeAmount } from '../src/paypal';
+import { arizonaListings } from '../src/parsers/arizona';
+import { pdfLinksFromDataset } from '../src/parsers/brightdata';
 import { chargeToday, priceSentence, saleEndsText } from '../src/util';
 import { describe, expect, it } from 'vitest';
 import { hiddenFields, listingsFromReport, type FormConfig } from '../src/parsers/form';
@@ -443,5 +445,39 @@ describe('end-of-season sale', () => {
     const sub = (done: number) => ({ id: 'I-1', status: 'ACTIVE', plan_id: 'P', billing_info: { cycle_executions: [{ tenure_type: 'TRIAL', sequence: 1, cycles_completed: done, total_cycles: 1 }] } });
     expect(nextChargeAmount(sub(0), plan)).toBe('19.99');
     expect(nextChargeAmount(sub(1), plan)).toBe('39.99');
+  });
+});
+
+describe('Arizona leftover PDF', () => {
+  const it_ = (page: number, x: number, y: number, w: number, font: string, str: string) => ({ page, x, y, w, h: 10, font, str });
+  const items = [
+    it_(1, 151, 688, 300, 'f2', '2027 Spring Draw Left-over Permits – November 9, 2026'),
+    it_(2, 237, 684, 150, 'f3', 'Youth Only General Javelina'),
+    it_(2, 67, 670, 44, 'f4', 'Hunt No.'), it_(2, 152, 670, 92, 'f4', 'Number of Permits'), it_(2, 302, 670, 20, 'f4', 'Unit'), it_(2, 463, 670, 29, 'f4', 'Dates'),
+    it_(2, 78, 657, 22, 'f1', '5034'), it_(2, 195, 657, 6, 'f1', '4'), it_(2, 270, 658, 80, 'f1', '6A,6B (EXLUDING'), it_(2, 259, 647, 100, 'f1', 'CAMP NAVAJO) AND 8'), it_(2, 438, 657, 78, 'f1', '1/22/27 – 1/31/27'),
+    it_(2, 78, 634, 22, 'f1', '5036'), it_(2, 193, 634, 11, 'f1', '32'), it_(2, 271, 635, 80, 'f1', '16A (EXCLUDING'), it_(2, 268, 623, 80, 'f1', 'MOHAVE COUNTY'), it_(2, 279, 612, 60, 'f1', 'PARK LANDS)'), it_(2, 438, 634, 78, 'f1', '1/22/27 – 1/31/27'),
+    it_(2, 187, 426, 237, 'f3', 'HAM (Handgun, Archery, Muzzleloader) Javelina'),
+    it_(2, 67, 412, 44, 'f4', 'Hunt No.'), it_(2, 152, 412, 92, 'f4', 'Number of Permits'), it_(2, 302, 412, 20, 'f4', 'Unit'), it_(2, 463, 412, 29, 'f4', 'Dates'),
+    it_(2, 78, 399, 22, 'f1', '5051'), it_(2, 193, 399, 11, 'f1', '18'), it_(2, 282, 399, 59, 'f1', '10 AND 18A'), it_(2, 441, 399, 73, 'f1', '2/5/27 – 2/15/27'),
+    it_(2, 78, 386, 22, 'f1', '5052'), it_(2, 193, 386, 11, 'f1', '13'), it_(2, 278, 386, 67, 'f1', '15A AND 15B'), it_(2, 441, 386, 73, 'f1', '2/5/27 – 2/15/27'),
+    it_(2, 150, 200, 300, 'f3', 'Non-Resident Raptor Capture-Falconry License Required Eyas Peregrine Falcon'),
+    it_(2, 67, 180, 44, 'f4', 'Hunt No.'), it_(2, 152, 180, 92, 'f4', 'Number of Permits'), it_(2, 302, 180, 20, 'f4', 'Unit'), it_(2, 463, 180, 29, 'f4', 'Dates'),
+    it_(2, 78, 167, 22, 'f1', '21002'), it_(2, 195, 167, 6, 'f1', '2'), it_(2, 280, 167, 50, 'f1', 'STATEWIDE'), it_(2, 438, 167, 78, 'f1', '4/1/27 – 8/31/27'),
+  ];
+  it('reads hunts, permits, wrapped units and dates by table', () => {
+    const l = arizonaListings(items);
+    expect(l.map((x) => [x.key, x.quantity])).toEqual([['5034', 4], ['5036', 32], ['5051', 18], ['5052', 13]]);
+    expect(l[0].label).toBe('Youth Only General Javelina, hunt 5034, unit 6A,6B (EXCLUDING CAMP NAVAJO) AND 8, 1/22/27 – 1/31/27');
+    expect(l[1].label).toContain('unit 16A (EXCLUDING MOHAVE COUNTY PARK LANDS)');
+    expect(l[0].weapon).toBe('any');
+    expect(l[2].weapon).toBe('muzzleloader');
+    expect(l[2].species).toBe('other');
+  });
+  it('reads Bright Data rows and waits while a run is going', () => {
+    expect(pdfLinksFromDataset({ status: 'building' })).toBeNull();
+    expect(pdfLinksFromDataset([
+      { title: 'Leftover permit-tags', url: 'https://azgfd-live-portal-wordpress-pantheon.s3.us-west-2.amazonaws.com/wp-content/uploads/2026/11/09054518/2027-S-FCFS-11_9_26.pdf' },
+      { title: 'bad', url: 'https://evil.example.com/x.pdf' },
+    ])).toHaveLength(1);
   });
 });

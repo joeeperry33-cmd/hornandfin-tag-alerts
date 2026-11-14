@@ -1,4 +1,5 @@
 import { allowedPdfUrl, fetchPdf, pdfItems } from './pdftext';
+import { readPdfListings } from './parsers/brightdata';
 import { runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
@@ -431,7 +432,12 @@ export default {
       const target = allowedPdfUrl(url.searchParams.get('url') ?? '');
       if (!target) return json({ error: 'Only state agency PDF hosts are allowed.' }, 400);
       try {
-        const items = await pdfItems(await fetchPdf(target, env.USER_AGENT));
+        const bytes = await fetchPdf(target, env.USER_AGENT);
+        if (url.searchParams.get('reader') === 'arizona') {
+          const listings = await readPdfListings('arizona', bytes);
+          return json({ count: listings.length, listings });
+        }
+        const items = await pdfItems(bytes);
         return json({ count: items.length, items });
       } catch (err) {
         return json({ error: String(err instanceof Error ? err.message : err) }, 502);
