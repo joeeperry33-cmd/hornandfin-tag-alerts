@@ -1,5 +1,5 @@
 import { classify, mergeFacets, type TagFacets } from '../tagtype';
-import { sha256, tidyCaps } from '../util';
+import { decodeEntities, sha256, tidyCaps } from '../util';
 import type { ParsedListing, ParseResult } from '../types';
 
 /**
@@ -60,7 +60,8 @@ export function listingsFromJson(data: unknown, cfg: JsonConfig, now = Date.now(
   const items = at(data, cfg.items);
   if (!Array.isArray(items)) throw new Error(`feed has no list at "${cfg.items}"`);
   const out: ParsedListing[] = [];
-  const fill = (tpl: string, it: Record<string, unknown>) => tpl.replace(/\{(\w+)\}/g, (_, f) => String(it[f] ?? '').trim());
+  const fill = (tpl: string, it: Record<string, unknown>) =>
+    tpl.replace(/\{([\w.]+)\}/g, (_, f: string) => String((f.includes('.') ? at(it, f) : it[f]) ?? '').trim());
   for (const it of items as Record<string, unknown>[]) {
     // key is a field name, or a template like "{HuntCode}|{Season}" when one field isn't unique.
     const key = (cfg.key.includes('{') ? fill(cfg.key, it) : String(it[cfg.key] ?? '')).trim();
@@ -74,7 +75,7 @@ export function listingsFromJson(data: unknown, cfg: JsonConfig, now = Date.now(
     const quantity = parts.every((q) => q === null) ? null : parts.reduce<number>((a, q) => a + (q ?? 0), 0);
     if ((cfg.skipZero ?? true) && quantity !== null && quantity <= 0) continue;
     if (cfg.requireQuantity && quantity === null) continue;
-    let label = fill(cfg.label ?? `{${cfg.key}}`, it).replace(/\s+/g, ' ').trim();
+    let label = decodeEntities(fill(cfg.label ?? `{${cfg.key}}`, it).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
     if (cfg.titleCase) label = tidyCaps(label);
     const facets = mergeFacets(classify(label), cfg.defaults);
     const species = cfg.speciesField ? String(it[cfg.speciesField] ?? '').toLowerCase().trim() || cfg.species : cfg.species;
