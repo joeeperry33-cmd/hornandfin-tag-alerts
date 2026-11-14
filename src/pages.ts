@@ -222,12 +222,27 @@ table.subs th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color
 .st{font-size:13px;font-weight:700;padding:2px 7px;border-radius:2px}
 .st-active{background:#dcefe2;color:#1d5c37}.st-unconfirmed{background:#f3ead2;color:#6b5312}.st-unsubscribed{background:#eee;color:#555}`;
   const body = `<div class="app">
-<h1>Subscribers</h1><p class="muted"><a href="/manage">Your alerts</a> &nbsp;|&nbsp; <a href="/admin/subscribers.csv">Download CSV</a> &nbsp;|&nbsp; <a href="/admin/paypal">PayPal</a> &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
+<h1>Subscribers</h1><p class="muted"><a href="/manage">Your alerts</a> &nbsp;|&nbsp; <a href="/admin/subscribers.csv">Download CSV</a> &nbsp;|&nbsp; <a href="/admin/paypal">PayPal</a> &nbsp;|&nbsp; <a href="/admin/costs">Costs</a> &nbsp;|&nbsp; <a href="/logout">Sign out</a></p>
 <div class="stats"><div class="stat"><b>${count('Active')}</b>Active</div><div class="stat"><b>${count('Unconfirmed')}</b>Haven't confirmed</div><div class="stat"><b>${count('Unsubscribed')}</b>Unsubscribed</div><div class="stat"><b>${rows.filter((r) => r.phone && r.sms_consent_at && !r.unsubscribed_at).length}</b>Want texts</div></div>
 <div class="tbl"><table class="subs"><thead><tr><th>Email</th><th>Status</th><th>States</th><th>Species</th><th>Tag types</th><th>Texts</th><th>Signed up</th></tr></thead>
 <tbody>${tr || '<tr><td colspan="7">No sign-ups yet.</td></tr>'}</tbody></table></div>
 <p class="muted" style="margin-top:14px;font-size:14px">Only you can see this page. Subscriber emails are private: don't share or sell them.</p></div>`;
   return shell(env, { title: 'Subscribers | Leftover Tag Alerts', noindex: true, nav: false, css }, body);
+}
+
+export function costsPage(env: Env, body: string): Response {
+  const css = `${APP_CSS}
+.app{max-width:1100px}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0 22px}
+.stat{background:var(--paper);border-top:3px solid var(--ink);padding:12px 16px;min-width:150px;flex:1}
+.stat b{display:block;font:900 30px/1 var(--display)}
+.tbl{overflow-x:auto;background:var(--paper);margin-bottom:10px}
+table.subs{border-collapse:collapse;width:100%;font-size:15px}
+table.subs th,table.subs td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.subs th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--moss)}
+table.subs .n{text-align:right;white-space:nowrap}
+h2{margin-top:28px}`;
+  return shell(env, { title: 'Costs | Leftover Tag Alerts', noindex: true, nav: false, css }, body);
 }
 
 export function subscribersCsv(rows: SubscriberRow[]): Response {

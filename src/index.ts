@@ -4,7 +4,7 @@ import { dailyHealth } from './health';
 import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
-import { loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
+import { costsPage, loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, robotsTxt, sitemapXml, termsPage } from './site';
 import { verifyTwilioSignature } from './twilio';
 import {
@@ -24,6 +24,7 @@ import {
   verifyWebhook,
 } from './paypal';
 import type { AlertEvent, Env, Source, Subscriber } from './types';
+import { costReport, costsPageBody } from './costs';
 import { isIntro, json, normalizeEmail, normalizeUsPhone, nowIso, parseList, randomToken, SPECIES, STATES, textsEnabled } from './util';
 import { widgetJs } from './widget';
 
@@ -468,6 +469,18 @@ export default {
       } catch (err) {
         return json({ error: String(err instanceof Error ? err.message : err) }, 502);
       }
+    }
+
+    if (path === '/admin/costs' || path === '/admin/costs.json') {
+      // Owner page: what each state costs to watch and what the price needs to be to break even.
+      const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
+      if (!me) return redirect('/login');
+      if (!isOwner(env, me)) return new Response('not found', { status: 404 });
+      const days = Math.min(Math.max(parseInt(url.searchParams.get('days') ?? '30', 10) || 30, 1), 90);
+      const report = await costReport(env, days);
+      const res = path.endsWith('.json') ? json(report) : costsPage(env, costsPageBody(report));
+      res.headers.set('cache-control', 'no-store');
+      return res;
     }
 
     if (path === '/admin/health-report') {

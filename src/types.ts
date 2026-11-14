@@ -2,6 +2,10 @@ export interface Env {
   DB: D1Database;
   /** This same Worker, so scheduled checks can run in the US-placed request handler. */
   SELF?: Fetcher;
+  /** Owner's fixed monthly costs for the costs page, e.g. "Cloudflare Workers Paid:5,Apify Starter:39". */
+  FIXED_MONTHLY_COSTS?: string;
+  /** Estimated Bright Data charge per scraper run, in dollars. */
+  BRIGHTDATA_COST_PER_RUN?: string;
   SITE_NAME: string;
   SITE_URL: string;
   API_URL: string;

@@ -54,6 +54,10 @@ PAYPAL_ENV = "live"
 INTRO_FREE = "false"
 PARTNER_URL = "https://hornandfin.com"
 USER_AGENT = "LeftoverTagAlerts/0.2 (+https://leftovertagalerts.com/bot)"
+# Fixed monthly costs for the owner costs page (/admin/costs), as "Name:dollars" pairs.
+FIXED_MONTHLY_COSTS = "Cloudflare Workers Paid:5"
+# Estimated Bright Data charge per scraper run (Arizona), in dollars.
+BRIGHTDATA_COST_PER_RUN = "0.005"
 
 # Secrets (set with `wrangler secret put NAME` or in the dashboard, never commit them):
 #   RESEND_API_KEY        email sending (resend.com)

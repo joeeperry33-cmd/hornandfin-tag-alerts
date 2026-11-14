@@ -573,3 +573,14 @@ describe('links reader', () => {
     expect(l[0].quantity).toBeNull();
   });
 });
+
+import { parseFixed } from '../src/costs';
+describe('fixed costs setting', () => {
+  it('reads name:dollars pairs', () => {
+    expect(parseFixed('Cloudflare Workers Paid:5, Apify Starter:39,Resend:0')).toEqual([
+      { name: 'Cloudflare Workers Paid', monthly: 5 },
+      { name: 'Apify Starter', monthly: 39 },
+      { name: 'Resend', monthly: 0 },
+    ]);
+  });
+});
