@@ -56,8 +56,9 @@ PARTNER_URL = "https://hornandfin.com"
 USER_AGENT = "LeftoverTagAlerts/0.2 (+https://leftovertagalerts.com/bot)"
 # Fixed monthly costs for the owner costs page (/admin/costs), as "Name:dollars" pairs.
 FIXED_MONTHLY_COSTS = "Cloudflare Workers Paid:5"
-# Estimated Bright Data charge per scraper run (Arizona), in dollars.
-BRIGHTDATA_COST_PER_RUN = "0.005"
+# Bright Data charge per scraper run (Arizona), in dollars. 0 while Arizona fits in Bright Data's
+# 5,000 free monthly credits (about 240 runs a month); the Apify version costs about $0.002 a run.
+BRIGHTDATA_COST_PER_RUN = "0"
 
 # Secrets (set with `wrangler secret put NAME` or in the dashboard, never commit them):
 #   RESEND_API_KEY        email sending (resend.com)
