@@ -425,6 +425,22 @@ export default {
       return res;
     }
 
+    if (path === '/health') {
+      // For an uptime monitor: 200 when the site is up and state checks ran in the last hour, else 503.
+      try {
+        const row = await env.DB.prepare('SELECT MAX(last_checked) AS last FROM sources WHERE active = 1').first<{ last: string | null }>();
+        const ageMin = row?.last ? Math.round((Date.now() - new Date(row.last).getTime()) / 60000) : null;
+        const ok = ageMin !== null && ageMin <= 60;
+        return json(
+          { ok, last_state_check_minutes_ago: ageMin, problem: ok ? null : 'State checks have not run in the last hour' },
+          ok ? 200 : 503,
+          { 'cache-control': 'no-store' },
+        );
+      } catch {
+        return json({ ok: false, problem: 'Database unavailable' }, 503, { 'cache-control': 'no-store' });
+      }
+    }
+
     if (path === '/admin/health-report') {
       // Owner tool: send the daily source health email now (sends nothing when every source is fine).
       const me = await byManageToken(env, readCookie(req, SESSION_COOKIE));
