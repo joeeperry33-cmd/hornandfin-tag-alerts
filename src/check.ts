@@ -2,6 +2,7 @@ import { parseChange, type ChangeConfig } from './parsers/change';
 import { fetchFormReports, type FormConfig } from './parsers/form';
 import { fetchJsonFeed, type JsonConfig } from './parsers/json';
 import { checkBrightDataPdfs, type BrightDataConfig } from './parsers/brightdata';
+import { checkApifyTask, type ApifyConfig } from './parsers/apify';
 import { coloradoRunDate, parseColorado } from './parsers/colorado';
 import { parseTable, type TableConfig } from './parsers/table';
 import { robotsAllows } from './robots';
@@ -262,6 +263,11 @@ export async function checkSource(env: Env, src: Source): Promise<number> {
       }
       status = 200;
       parsed = await parseColorado(snap.body);
+    } else if (src.parser === 'apify') {
+      // State page blocks automated checks: run the owner's Apify task and read its rows.
+      const report = await checkApifyTask(env, JSON.parse(src.parser_config ?? '{}') as ApifyConfig);
+      status = report.status;
+      parsed = report.result;
     } else if (src.parser === 'brightdata_pdf') {
       // State page blocks automated checks: the owner's Bright Data scraper finds the PDFs, we read them.
       const report = await checkBrightDataPdfs(env, src.id, JSON.parse(src.parser_config ?? '{}') as BrightDataConfig);

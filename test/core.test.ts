@@ -1,4 +1,5 @@
 import { currentSale, nextChargeAmount } from '../src/paypal';
+import { listingsFromApify, soldOutZones } from '../src/parsers/apify';
 import { arizonaListings } from '../src/parsers/arizona';
 import { pdfLinksFromDataset } from '../src/parsers/brightdata';
 import { chargeToday, priceSentence, saleEndsText } from '../src/util';
@@ -479,5 +480,20 @@ describe('Arizona leftover PDF', () => {
       { title: 'Leftover permit-tags', url: 'https://azgfd-live-portal-wordpress-pantheon.s3.us-west-2.amazonaws.com/wp-content/uploads/2026/11/09054518/2027-S-FCFS-11_9_26.pdf' },
       { title: 'bad', url: 'https://evil.example.com/x.pdf' },
     ])).toHaveLength(1);
+  });
+});
+
+describe('Apify Massachusetts zones', () => {
+  const cfg = { task: 't', items: 'zones', key: 'zone', quantity: 'availablePermits', label: 'Surplus antlerless deer permit, zone {zone}', species: 'deer', defaults: { sex: 'antlerless' as const }, soldOutField: 'soldOutNotice' };
+  it('reads zones, counts and the sold-out notice', () => {
+    const items = [{ soldOutNotice: 'ZONES 1, 4S, 5, and 8 ARE SOLD OUT.', zones: [
+      { zone: '1', availablePermits: '12' }, { zone: '4S', availablePermits: '3' }, { zone: '10', availablePermits: '1,204' },
+      { zone: '11', availablePermits: 'Sold out' }, { zone: '13', availablePermits: '45' },
+    ] }];
+    const l = listingsFromApify(items, cfg);
+    expect(l.map((x) => [x.key, x.quantity])).toEqual([['10', 1204], ['13', 45]]);
+    expect(l[0].label).toBe('Surplus antlerless deer permit, zone 10');
+    expect(l[0].sex).toBe('antlerless');
+    expect([...soldOutZones('ZONES 1, 4S, 5, and 8 ARE SOLD OUT.')]).toEqual(['1', '4S', '5', '8']);
   });
 });

@@ -28,6 +28,8 @@ export interface Env {
   USER_AGENT: string;
   /** Bright Data API key (secret) for sources whose state page blocks automated checks. */
   BRIGHTDATA_API_KEY?: string;
+  /** Apify API token (secret) for sources read through the owner's Apify tasks. */
+  APIFY_TOKEN?: string;
   RESEND_API_KEY?: string;
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
@@ -53,7 +55,7 @@ export interface Source {
   url: string;
   link_url: string | null;
   format: 'html' | 'pdf' | 'csv' | 'json';
-  parser: 'change' | 'table' | 'form' | 'json' | 'snapshot' | 'brightdata_pdf';
+  parser: 'change' | 'table' | 'form' | 'json' | 'snapshot' | 'brightdata_pdf' | 'apify';
   parser_config: string | null;
   species: string | null;
   check_minutes: number;
