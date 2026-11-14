@@ -594,3 +594,13 @@ describe('off-season pause', () => {
     expect(isDue(src, new Date('2026-07-20T00:00:00Z'))).toBe(true);
   });
 });
+
+import { checkInterval as intervalNow } from '../src/check';
+describe('weekly off-season checks', () => {
+  it('uses the offSeason minutes outside the season and windows', () => {
+    const src = { season_start: '08-15', season_end: '02-28', rush: '[{"start":"03-15","end":"05-31","minutes":180}]', check_minutes: 180, parser_config: '{"offSeason":10080}' } as never;
+    expect(intervalNow(src, new Date('2026-11-14T12:00:00Z'))).toBe(180);
+    expect(intervalNow(src, new Date('2027-04-10T12:00:00Z'))).toBe(180);
+    expect(intervalNow(src, new Date('2027-07-01T12:00:00Z'))).toBe(10080);
+  });
+});

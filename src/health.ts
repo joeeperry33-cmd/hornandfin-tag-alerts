@@ -1,7 +1,7 @@
 import type { Env, Source } from './types';
 import { sendEmails } from './notify';
 import { escapeHtml, nowIso, STATES } from './util';
-import { pausedNow } from './check';
+import { checkInterval, pausedNow } from './check';
 
 /**
  * Owner alerts when a state source stops working, so it gets fixed before subscribers miss openings.
@@ -124,12 +124,14 @@ export async function dailyHealth(env: Env): Promise<number> {
   ).all<Source>();
   const now = Date.now();
   const failing = results.filter((s) => s.fail_count >= FAIL_THRESHOLD);
-  // Overdue: not checked for 3x its interval (at least 6 hours, at most 3 days).
+  // Overdue: not checked for 3x its current interval (at least 6 hours; at most 3 days, or two
+  // intervals for sources checked weekly out of season).
   const overdue = results.filter((s) => {
     if (s.fail_count >= FAIL_THRESHOLD) return false;
     if (pausedNow(s)) return false; // waiting for its season
     if (!s.last_checked) return true;
-    const limit = Math.min(Math.max(s.check_minutes * 3, 360), 4320) * 60_000;
+    const interval = checkInterval(s);
+    const limit = Math.max(Math.min(Math.max(interval * 3, 360), 4320), interval * 2) * 60_000;
     return now - new Date(s.last_checked).getTime() > limit;
   });
   if (!failing.length && !overdue.length) return 0;

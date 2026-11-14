@@ -28,21 +28,32 @@ export function rushMinutes(src: Source, now = new Date()): number | null {
   }
 }
 
-/** Sources set to {"offSeason":"pause"} aren't checked at all outside their season (paid scrapers). */
-export function pausedNow(src: Source, now = new Date()): boolean {
-  if (inSeason(src.season_start, src.season_end, now) || rushMinutes(src, now)) return false;
+function offSeasonSetting(src: Source): unknown {
   try {
-    return JSON.parse(src.parser_config ?? '{}').offSeason === 'pause';
+    return JSON.parse(src.parser_config ?? '{}').offSeason;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
+/** Sources set to {"offSeason":"pause"} aren't checked at all outside their season (paid scrapers). */
+export function pausedNow(src: Source, now = new Date()): boolean {
+  if (inSeason(src.season_start, src.season_end, now) || rushMinutes(src, now)) return false;
+  return offSeasonSetting(src) === 'pause';
+}
+
+/**
+ * Minutes between checks right now. Outside its season a source is checked daily, or as its
+ * {"offSeason": minutes} setting says (e.g. 10080 = weekly, to confirm a paid scraper still works),
+ * or not at all with {"offSeason": "pause"}.
+ */
 export function checkInterval(src: Source, now = new Date()): number {
   const rush = rushMinutes(src, now);
   if (rush) return Math.min(rush, src.check_minutes);
-  if (pausedNow(src, now)) return Infinity;
-  return inSeason(src.season_start, src.season_end, now) ? src.check_minutes : OFF_SEASON_MINUTES;
+  if (inSeason(src.season_start, src.season_end, now)) return src.check_minutes;
+  const off = offSeasonSetting(src);
+  if (off === 'pause') return Infinity;
+  return typeof off === 'number' && off > 0 ? off : OFF_SEASON_MINUTES;
 }
 
 export function isDue(src: Source, now = new Date()): boolean {
@@ -50,7 +61,7 @@ export function isDue(src: Source, now = new Date()): boolean {
   if (!Number.isFinite(interval)) return false;
   if (!src.last_checked) return true;
   // Back off failing sources: double the interval per failure, up to a day.
-  const backoff = Math.min(interval * 2 ** Math.min(src.fail_count, 5), OFF_SEASON_MINUTES);
+  const backoff = Math.min(interval * 2 ** Math.min(src.fail_count, 5), Math.max(interval, OFF_SEASON_MINUTES));
   const elapsed = (now.getTime() - new Date(src.last_checked).getTime()) / 60000;
   return elapsed >= backoff - 1;
 }
