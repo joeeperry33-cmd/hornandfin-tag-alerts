@@ -584,3 +584,13 @@ describe('fixed costs setting', () => {
     ]);
   });
 });
+
+import { pausedNow } from '../src/check';
+describe('off-season pause', () => {
+  it('skips paused sources outside their season only', () => {
+    const src = { season_start: '06-15', season_end: '09-15', rush: null, check_minutes: 720, last_checked: null, fail_count: 0, parser_config: '{"offSeason":"pause"}' } as never;
+    expect(pausedNow(src, new Date('2026-11-14T00:00:00Z'))).toBe(true);
+    expect(isDue(src, new Date('2026-11-14T00:00:00Z'))).toBe(false);
+    expect(isDue(src, new Date('2026-07-20T00:00:00Z'))).toBe(true);
+  });
+});

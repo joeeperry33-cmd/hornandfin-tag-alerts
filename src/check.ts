@@ -28,15 +28,27 @@ export function rushMinutes(src: Source, now = new Date()): number | null {
   }
 }
 
+/** Sources set to {"offSeason":"pause"} aren't checked at all outside their season (paid scrapers). */
+export function pausedNow(src: Source, now = new Date()): boolean {
+  if (inSeason(src.season_start, src.season_end, now) || rushMinutes(src, now)) return false;
+  try {
+    return JSON.parse(src.parser_config ?? '{}').offSeason === 'pause';
+  } catch {
+    return false;
+  }
+}
+
 export function checkInterval(src: Source, now = new Date()): number {
   const rush = rushMinutes(src, now);
   if (rush) return Math.min(rush, src.check_minutes);
+  if (pausedNow(src, now)) return Infinity;
   return inSeason(src.season_start, src.season_end, now) ? src.check_minutes : OFF_SEASON_MINUTES;
 }
 
 export function isDue(src: Source, now = new Date()): boolean {
-  if (!src.last_checked) return true;
   const interval = checkInterval(src, now);
+  if (!Number.isFinite(interval)) return false;
+  if (!src.last_checked) return true;
   // Back off failing sources: double the interval per failure, up to a day.
   const backoff = Math.min(interval * 2 ** Math.min(src.fail_count, 5), OFF_SEASON_MINUTES);
   const elapsed = (now.getTime() - new Date(src.last_checked).getTime()) / 60000;

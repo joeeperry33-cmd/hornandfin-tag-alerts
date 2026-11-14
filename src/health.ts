@@ -1,6 +1,7 @@
 import type { Env, Source } from './types';
 import { sendEmails } from './notify';
 import { escapeHtml, nowIso, STATES } from './util';
+import { pausedNow } from './check';
 
 /**
  * Owner alerts when a state source stops working, so it gets fixed before subscribers miss openings.
@@ -119,13 +120,14 @@ export async function noteEmptyList(env: Env, src: Source, previous: number): Pr
 /** Daily: one summary of everything failing or overdue. Silent when all is well. */
 export async function dailyHealth(env: Env): Promise<number> {
   const { results } = await env.DB.prepare(
-    'SELECT id, state, name, parser, url, link_url, check_minutes, last_checked, fail_count, last_error FROM sources WHERE active = 1 ORDER BY state',
+    'SELECT id, state, name, parser, parser_config, url, link_url, check_minutes, season_start, season_end, rush, last_checked, fail_count, last_error FROM sources WHERE active = 1 ORDER BY state',
   ).all<Source>();
   const now = Date.now();
   const failing = results.filter((s) => s.fail_count >= FAIL_THRESHOLD);
   // Overdue: not checked for 3x its interval (at least 6 hours, at most 3 days).
   const overdue = results.filter((s) => {
     if (s.fail_count >= FAIL_THRESHOLD) return false;
+    if (pausedNow(s)) return false; // waiting for its season
     if (!s.last_checked) return true;
     const limit = Math.min(Math.max(s.check_minutes * 3, 360), 4320) * 60_000;
     return now - new Date(s.last_checked).getTime() > limit;
