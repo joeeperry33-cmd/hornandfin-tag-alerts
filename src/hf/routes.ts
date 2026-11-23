@@ -75,7 +75,7 @@ async function desk(env: Env, req: Request, cors: Record<string, string>, messag
   try {
     const out = await askDesk(env, messages, opts);
     await recordUsage(env, who, out.usage);
-    return json({ answer: out.text, used: out.tools, free_note: 'Free for a limited time.' }, 200, cors);
+    return json({ answer: out.text, used: out.tools }, 200, cors);
   } catch (err) {
     console.error('desk failed', err);
     return json({ error: 'Something went wrong on our end. Try again in a minute.' }, 502, cors);
@@ -124,7 +124,7 @@ async function stockingFollow(env: Env, b: Record<string, unknown>, cors: Record
     {
       to: email,
       subject: `Confirm stocking alerts for ${what}`,
-      html: `<div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#15211c">Confirm and we'll email you when ${escapeHtml(STATES[state])} stocks ${escapeHtml(what)}. Free for a limited time.<p><a href="${link}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:10px 16px;border-radius:3px;font-weight:bold">Confirm my stocking alerts</a></p><div style="font-size:13px;color:#5b6b5e">Didn't ask for this? Ignore this email.<br>Horn & Fin, ${escapeHtml(env.BUSINESS_ADDRESS)}</div></div>`,
+      html: `<div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#15211c">Confirm and we'll email you when ${escapeHtml(STATES[state])} stocks ${escapeHtml(what)}.<p><a href="${link}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:10px 16px;border-radius:3px;font-weight:bold">Confirm my stocking alerts</a></p><div style="font-size:13px;color:#5b6b5e">Didn't ask for this? Ignore this email.<br>Horn & Fin, ${escapeHtml(env.BUSINESS_ADDRESS)}</div></div>`,
       text: `Confirm stocking alerts for ${what}: ${link}`,
     },
   ]);
