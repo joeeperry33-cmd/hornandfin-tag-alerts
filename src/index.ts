@@ -4,6 +4,9 @@ import { dailyHealth } from './health';
 import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
+import { hfAdmin, hfRoute } from './hf/routes';
+import { syncListings } from './hf/data';
+import { checkStocking, sendStockingAlerts } from './hf/stocking';
 import { loadDeadlines, sendDeadlineReminders, upcomingDeadlines } from './reminders';
 import { costsPage, loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, PUBLIC_DELAY_DAYS, robotsTxt, sitemapXml, termsPage } from './site';
@@ -308,7 +311,9 @@ export default {
     }
 
     if (path === '/internal/run-checks' && req.method === 'POST') return internalRunChecks(env, req);
+    if (path === '/mcp') return (await hfRoute(env, req, url, path, {}))!;
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(env, req) });
+    if (path.startsWith('/api/hf/')) return (await hfRoute(env, req, url, path, cors(env, req)))!;
     if (path === '/widget.js') return widgetJs(env);
     if (path === '/api/subscribe' && req.method === 'POST') return subscribe(env, req);
     if (path === '/api/verify') return verify(env, url);
@@ -544,6 +549,10 @@ export default {
         ).all<Source>();
         return json({ sources: results });
       }
+      if (path.startsWith('/admin/hf/')) {
+        const r = await hfAdmin(env, req, url, path);
+        if (r) return r;
+      }
       if (path === '/admin/deadlines' && req.method === 'POST') {
         return json(await loadDeadlines(env, (await req.json()) as { deadlines?: [] }));
       }
@@ -588,6 +597,8 @@ export default {
           .then((n) => n && console.log(`renewal reminders sent: ${n}`))
           .then(() => sendDigests(env))
           .then((n) => console.log(`digests sent: ${n}`))
+          .then(() => syncListings(env))
+          .then((r) => console.log(`listings synced: ${r.listings}${r.error ? ` (error: ${r.error})` : ''}`))
           .then(() => sendDeadlineReminders(env))
           .then((r) => console.log(`deadline reminders: ${r.emails} emails, ${r.sms} texts${r.dryRun ? ' (dry run)' : ''}`)),
       );
@@ -597,6 +608,7 @@ export default {
     // visitors from outside the US. Hand the checks to this Worker's request handler, which runs in
     // the US (see [placement] in wrangler.toml); run them here only if that hand-off fails.
     if (await runChecksInUs(env)) return;
+    await stockingRun(env);
     const result = await runChecks(env);
     const sent = await sendInstantAlerts(env);
     console.log(`checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
@@ -632,9 +644,24 @@ async function internalRunChecks(env: Env, req: Request): Promise<Response> {
   const fresh = row && Date.now() - new Date(row.updated_at).getTime() < 120_000;
   if (!given || !row || !fresh || given !== row.value) return new Response('Not found', { status: 404 });
   await env.DB.prepare('DELETE FROM settings WHERE key = ?').bind(RUN_TOKEN_KEY).run();
+  await stockingRun(env);
   const result = await runChecks(env);
   const sent = await sendInstantAlerts(env);
   const placed = req.headers.get('cf-placement') ?? 'unknown';
   console.log(`[${placed}] checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
   return Response.json({ placed, ...result, emails: sent.emails, sms: sent.sms });
+}
+
+/** Trout stocking reports (each source has its own interval), then any alerts for new stockings. Never blocks tag checks. */
+async function stockingRun(env: Env): Promise<void> {
+  try {
+    const r = await checkStocking(env);
+    if (r.checked) console.log(`stocking: ${r.checked} reports read, ${r.added} new rows${r.errors.length ? `, errors: ${r.errors.join('; ')}` : ''}`);
+    if (r.added) {
+      const sent = await sendStockingAlerts(env);
+      console.log(`stocking alerts: ${sent.emails} emails, ${sent.sms} texts${sent.dryRun ? ' (dry run)' : ''}`);
+    }
+  } catch (err) {
+    console.error('stocking run failed', err);
+  }
 }
