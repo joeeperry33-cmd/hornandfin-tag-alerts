@@ -156,10 +156,10 @@ export async function searchRegulations(env: Env, input: { state: string; query:
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOP.has(w))
+    .filter((w) => w.length > 2 && !STOP.has(w) && !STATE_WORDS.has(w))
     .slice(0, 8);
   if (!terms.length) return { passages: [], note: 'Ask with a few specific words.' };
-  const match = terms.map((t) => `"${t}"`).join(' OR ');
+  const match = expandTerms(terms).map((t) => `"${t}"`).join(' OR ');
   const { results } = await env.DB.prepare(
     `SELECT p.state, p.year, p.book, p.page, p.url, p.text FROM hf_reg_fts f JOIN hf_reg_passages p ON p.id = f.rowid
      WHERE hf_reg_fts MATCH ? AND p.state = ? ORDER BY bm25(hf_reg_fts) LIMIT ?`,
@@ -174,7 +174,39 @@ export async function searchRegulations(env: Env, input: { state: string; query:
   };
 }
 
-const STOP = new Set(['the', 'and', 'for', 'can', 'are', 'what', 'when', 'how', 'does', 'with', 'you', 'have', 'this', 'that', 'from', 'there', 'any', 'need']);
+/** Everyday words hunters use, mapped to the words rulebooks use. */
+const SYNONYMS: Record<string, string[]> = {
+  orange: ['fluorescent', 'daylight fluorescent', 'hunter orange', 'pink'],
+  hat: ['head covering', 'headwear', 'garment'],
+  vest: ['garment', 'outer garment'],
+  blaze: ['fluorescent', 'orange'],
+  bow: ['archery'],
+  crossbow: ['crossbow', 'archery'],
+  muzzy: ['muzzleloader'],
+  gun: ['firearm', 'rifle'],
+  tag: ['license'],
+  tags: ['license'],
+  kid: ['youth'],
+  kids: ['youth'],
+  drone: ['unmanned', 'aircraft'],
+  bait: ['baiting'],
+  quad: ['motor vehicle', 'atv'],
+  atv: ['off-highway vehicle', 'motor vehicle'],
+  shed: ['antler', 'shed antler'],
+  sheds: ['antler', 'shed antler'],
+  hours: ['shooting hours', 'sunrise', 'sunset'],
+  points: ['preference point', 'bonus point'],
+  leftover: ['leftover', 'reissue'],
+  transport: ['transportation', 'evidence of sex'],
+};
+export function expandTerms(terms: string[]): string[] {
+  const out = new Set(terms);
+  for (const t of terms) for (const s of SYNONYMS[t] ?? []) out.add(s);
+  return [...out].slice(0, 20);
+}
+
+const STATE_WORDS = new Set(Object.values(STATES).flatMap((n) => n.toLowerCase().split(' ')));
+const STOP = new Set(['need', 'wear', 'hunt', 'hunting', 'the', 'and', 'for', 'can', 'are', 'what', 'when', 'how', 'does', 'with', 'you', 'have', 'this', 'that', 'from', 'there', 'any', 'need']);
 
 export async function recentStocking(env: Env, input: { state: string; water?: string; county?: string; days?: number }): Promise<unknown> {
   const since = new Date(Date.now() - (input.days ?? 21) * 86_400_000).toISOString().slice(0, 10);
