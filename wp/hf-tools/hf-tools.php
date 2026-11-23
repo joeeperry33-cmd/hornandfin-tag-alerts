@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Horn & Fin - Ultimate Hunting and Fishing Resource
- * Description: The free hunting and fishing tools page (Plan a Hunt, Ask Horn & Fin, Draw Odds & Points, Deadlines & Reminders, Stocking Alerts, Returned Tags). Use the [hf_resource] shortcode. Also shares public listing facts with the tools and can send hunters an instant thank-you when they contact a listing (off until turned on).
- * Version: 1.0.2
+ * Plugin Name: Horn & Fin - Field Kit
+ * Description: Horn & Fin Field Kit tools page (Plan a Hunt, Ask Horn & Fin, Draw Odds & Points, Deadlines & Reminders, Stocking Alerts, Returned Tags). Use the [hf_resource] shortcode. Also shares public listing facts with the tools and can send hunters an instant thank-you when they contact a listing (off until turned on).
+ * Version: 1.0.3
  * Author: Horn & Fin
  */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -36,7 +36,7 @@ register_activation_hook( __FILE__, function () {
 			'post_status'  => 'draft',
 			'post_title'   => 'The Ultimate Hunting and Fishing Resource',
 			'post_name'    => HF_TOOLS_PAGE_SLUG,
-			'post_content' => "<!-- wp:paragraph --><p><strong>Free for a limited time.</strong> Plan your next hunt, check draw odds at your points, get deadline reminders and know when your favorite water gets stocked.</p><!-- /wp:paragraph -->\n<!-- wp:shortcode -->[hf_resource]<!-- /wp:shortcode -->",
+			'post_content' => "<!-- wp:paragraph --><p>The ultimate hunting and fishing resource. Plan your next hunt, check draw odds at your points, get deadline reminders and know when your favorite water gets stocked.</p><!-- /wp:paragraph -->\n<!-- wp:shortcode -->[hf_resource]<!-- /wp:shortcode -->",
 		) );
 	}
 } );
@@ -192,7 +192,7 @@ function hf_tools_listings_public( WP_REST_Request $req ) {
 /** Admin check: which JReviews fields the tools picked, and the inquiry table's columns. */
 function hf_tools_check() {
 	return array(
-		'version'          => '1.0.2',
+		'version'          => '1.0.3',
 		'fields'           => hf_tools_fieldmap(),
 		'content_columns'  => hf_tools_columns( hf_tools_table( 'content' ) ),
 		'inquiry_columns'  => hf_tools_columns( hf_tools_table( 'inquiry' ) ),
@@ -315,5 +315,5 @@ add_action( 'wp_body_open', function () {
 	echo '<div class="hf-ask-banner" style="background:#ff6a13;color:#15211c;font:600 15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:9px 16px">'
 		. '<a href="' . $url . '" style="color:#15211c;text-decoration:none">'
 		. '<strong style="font-size:16px">Ask Horn &amp; Fin</strong> &nbsp;Rules, seasons, draw odds and where to fish, answered with the rulebook page. '
-		. '<span style="white-space:nowrap">Free for a limited time &rarr;</span></a></div>';
+		. '<span style="white-space:nowrap">Ask a question &rarr;</span></a></div>';
 }, 20 );
