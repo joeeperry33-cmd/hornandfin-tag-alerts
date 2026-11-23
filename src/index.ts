@@ -5,6 +5,7 @@ import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
 import { hfAdmin, hfRoute } from './hf/routes';
+import { hfToolsJs } from './hf/widget';
 import { syncListings } from './hf/data';
 import { checkStocking, sendStockingAlerts } from './hf/stocking';
 import { loadDeadlines, sendDeadlineReminders, upcomingDeadlines } from './reminders';
@@ -315,6 +316,7 @@ export default {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(env, req) });
     if (path.startsWith('/api/hf/')) return (await hfRoute(env, req, url, path, cors(env, req)))!;
     if (path === '/widget.js') return widgetJs(env);
+    if (path === '/hf-tools.js') return hfToolsJs(env);
     if (path === '/api/subscribe' && req.method === 'POST') return subscribe(env, req);
     if (path === '/api/verify') return verify(env, url);
     if (path === '/api/unsubscribe') return unsubscribe(env, url, req);
