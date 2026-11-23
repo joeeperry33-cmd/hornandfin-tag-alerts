@@ -7,7 +7,7 @@ describe('tools block', () => {
     const js = await hfToolsJs({ API_URL: 'https://leftovertagalerts.com' } as Env).text();
     expect(() => new Function(js)).not.toThrow();
     expect(js).toContain('Free for a limited time');
-    expect(js).toContain('The Ultimate Hunting and Fishing Resource');
+    expect(js).toContain('Horn &amp; Fin Field Kit');
     expect(js.toLowerCase()).not.toMatch(/\bai\b|artificial intelligence|chatbot/);
   });
 });

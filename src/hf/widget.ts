@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { SPECIES, SPECIES_LABEL, STATES } from '../util';
 
 /**
- * The Ultimate Hunting and Fishing Resource: every Horn & Fin tool in one embeddable block.
+ * Horn & Fin Field Kit (the ultimate hunting and fishing resource): every Horn & Fin tool in one embeddable block.
  *   <div id="hf-tools"></div><script src="https://leftovertagalerts.com/hf-tools.js" async></script>
  * Optional data-tab="plan|ask|odds|dates|stocking|returned" opens a tab; data-state="CO" preselects a state.
  * Plain JS (no template literals) so it can live inside this TypeScript string.
@@ -21,7 +21,7 @@ function post(path,body){return fetch(API+path,{method:'POST',headers:{'content-
 function get(path){return fetch(API+path).then(function(r){return r.json();});}
 var CSS='.hft{font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#15211c;max-width:960px;margin:0 auto}'+
 '.hft *{box-sizing:border-box}.hft .hero{background:#1f3d35;color:#fff;border-radius:6px 6px 0 0;padding:22px 22px 16px}'+
-'.hft .hero h2{margin:0 0 4px;font-size:26px;color:#fff}.hft .hero p{margin:0;color:#d6e2da}'+
+'.hft .hero h2{margin:0 0 4px;font-size:26px;color:#fff}.hft .hero p{margin:0;color:#d6e2da}.hft .hero p.sub{margin:0 0 8px;color:#f0a35e;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:13px}'+
 '.hft .free{display:inline-block;background:#ff6a13;color:#15211c;font-weight:700;font-size:13px;letter-spacing:.3px;padding:3px 10px;border-radius:3px;margin-bottom:10px;text-transform:uppercase}'+
 '.hft .tabs{display:flex;flex-wrap:wrap;gap:4px;background:#173029;padding:8px 10px}'+
 '.hft .tabs button{background:transparent;border:0;color:#d6e2da;padding:8px 12px;font-weight:600;font-size:14px;border-radius:3px;cursor:pointer}'+
@@ -39,7 +39,7 @@ var CSS='.hft{font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 var TABS=[['plan','Plan a Hunt'],['ask','Ask Horn & Fin'],['odds','Draw Odds & Points'],['dates','Deadlines & Reminders'],['stocking','Stocking Alerts'],['returned','Returned Tags']];
 function mount(root){if(root.dataset.mounted)return;root.dataset.mounted='1';var pre=(root.dataset.state||'').toUpperCase();
 root.appendChild(el('style',{},CSS));var w=el('div',{class:'hft'});root.appendChild(w);
-w.innerHTML='<div class="hero"><span class="free">Free for a limited time</span><h2>The Ultimate Hunting and Fishing Resource</h2><p>Plan hunts, check draw odds, never miss a deadline and know when your water gets stocked. All free for a limited time.</p></div>'+
+w.innerHTML='<div class="hero"><span class="free">Free for a limited time</span><h2>Horn &amp; Fin Field Kit</h2><p class="sub">The ultimate hunting and fishing resource</p><p>Plan hunts, check draw odds, never miss a deadline and know when your water gets stocked. All free for a limited time.</p></div>'+
 '<div class="tabs" role="tablist">'+TABS.map(function(t){return '<button role="tab" data-t="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div><div class="pane"></div>';
 var pane=w.querySelector('.pane');var btns=w.querySelectorAll('.tabs button');
 function show(t){for(var i=0;i<btns.length;i++)btns[i].setAttribute('aria-selected',btns[i].dataset.t===t?'true':'false');pane.innerHTML='';VIEWS[t](pane,pre);try{history.replaceState(null,'','#'+t);}catch(e){}}
