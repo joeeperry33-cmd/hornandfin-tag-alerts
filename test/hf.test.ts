@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { followMatches, parseStockDate, stockingsFromJson, stockingsFromTable } from '../src/hf/stocking';
+import { splitWater, followMatches, parseStockDate, stockingsFromJson, stockingsFromTable } from '../src/hf/stocking';
 import { oddsAt, waterKey } from '../src/hf/tools';
 import { chunkPage, cleanPoints, stateCode } from '../src/hf/data';
 import { cleanHistory, planPrompt, VOICE } from '../src/hf/claude';
@@ -25,6 +25,11 @@ describe('stocking reports', () => {
       { water: 'water', county: 'county', species: 'species', quantity: 'quantity', date: 'date' },
     );
     expect(rows).toEqual([{ water: 'Deer Creek Reservoir', county: 'Wasatch', species: 'Rainbow Trout', quantity: 5000, stocked_on: '2026-11-18' }]);
+  });
+  it('splits Washington-style packed water cells', () => {
+    const cfg = { water: 'lake', waterRegex: '^(?<water>.+?)\\s*\\((?<code>[A-Z]{4})\\)\\s*(?<county>[A-Za-z .]+?)\\s+Region', countyCodes: {} };
+    expect(splitWater('BATTLE GROUND LK (CLAR) Clark Region 5', cfg)).toEqual({ water: 'BATTLE GROUND LK', county: 'Clark' });
+    expect(splitWater('Odd cell', cfg)).toEqual({ water: 'Odd cell', county: null });
   });
   it('reads json rows', () => {
     const rows = stockingsFromJson({ data: [{ w: 'Lake A', c: 'Placer', n: '200', d: '2026-11-01' }] }, { items: 'data', water: 'w', county: 'c', quantity: 'n', date: 'd', fixedSpecies: 'trout' });
