@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Horn & Fin - Ultimate Hunting and Fishing Resource
- * Description: The free hunting and fishing tools page (Plan a Hunt, Ask Horn & Fin, Draw Odds & Points, Deadlines & Reminders, Stocking Alerts, Returned Tags). Use the [hf_resource] shortcode. Also shares public listing facts with the tools and can send hunters an instant thank-you when they contact a listing (off until turned on).
- * Version: 1.0.0
+ * Plugin Name: Horn & Fin - Field Kit
+ * Description: Horn & Fin Field Kit tools page (Plan a Hunt, Ask Horn & Fin, Draw Odds & Points, Deadlines & Reminders, Stocking Alerts, Returned Tags). Use the [hf_resource] shortcode. Also shares public listing facts with the tools and can send hunters an instant thank-you when they contact a listing (off until turned on).
+ * Version: 1.0.3
  * Author: Horn & Fin
  */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -77,18 +77,35 @@ function hf_tools_pick_col( $cols, $setting, $patterns ) {
 	return '';
 }
 
+/** Each place/species value can live in several JReviews fields (hunting listings use their own); use every one that exists. */
 function hf_tools_fieldmap() {
 	$s = hf_tools_settings();
 	$cols = hf_tools_columns( hf_tools_table( 'content' ) );
+	$pick = function ( $setting, $names ) use ( $cols ) {
+		if ( $setting && in_array( $setting, $cols, true ) ) { return array( $setting ); }
+		return array_values( array_intersect( $names, $cols ) );
+	};
 	return array(
-		'state'    => hf_tools_pick_col( $cols, $s['state_col'], array( '/^jr_state$/', '/^jr_.*state/' ) ),
-		'city'     => hf_tools_pick_col( $cols, $s['city_col'], array( '/^jr_city$/', '/^jr_.*city/', '/^jr_.*town/' ) ),
-		'county'   => hf_tools_pick_col( $cols, $s['county_col'], array( '/^jr_county$/', '/^jr_.*county/' ) ),
-		'species'  => hf_tools_pick_col( $cols, $s['species_col'], array( '/^jr_species$/', '/^jr_.*species/', '/^jr_.*game/' ) ),
-		'featured' => in_array( 'featured', $cols, true ) ? 'featured' : '',
-		'lat'      => hf_tools_pick_col( $cols, '', array( '/^jr_lat/', '/latitude/' ) ),
-		'lng'      => hf_tools_pick_col( $cols, '', array( '/^jr_lon/', '/^jr_lng/', '/longitude/' ) ),
+		'state'    => $pick( $s['state_col'], array( 'jr_state', 'jr_statehunting', 'jr_huntingstate' ) ),
+		'city'     => $pick( $s['city_col'], array( 'jr_city', 'jr_cityhunting' ) ),
+		'county'   => $pick( $s['county_col'], array( 'jr_county', 'jr_countyhunting' ) ),
+		'species'  => $pick( $s['species_col'], array( 'jr_species', 'jr_biggamespecies', 'jr_additionalspecies', 'jr_fishspecies', 'jr_frewshwaterspecies', 'jr_freshwateradditionalspecies', 'jr_saltwaterspecies', 'jr_specieswaterfowl', 'jr_speciesuplandgame', 'jr_speciessmallgame' ) ),
+		'featured' => in_array( 'featured', $cols, true ) ? array( 'featured' ) : array(),
+		'lat'      => array_values( preg_grep( '/^jr_lat/', $cols ) ),
+		'lng'      => array_values( preg_grep( '/^jr_(lon|lng)/', $cols ) ),
 	);
+}
+
+/** First non-empty value among a listing's fields for one key (or all of them joined, for species). */
+function hf_tools_value( $row, $cols, $join = false ) {
+	$vals = array();
+	foreach ( $cols as $c ) {
+		$v = isset( $row[ $c ] ) ? hf_tools_clean_value( $row[ $c ] ) : '';
+		if ( '' === $v || 'Null' === $v || 'NULL' === $v ) { continue; }
+		if ( ! $join ) { return $v; }
+		$vals[] = $v;
+	}
+	return $join ? implode( ', ', array_unique( $vals ) ) : '';
 }
 
 /** JReviews stores choice fields as *value*value*; turn that into "value, value". */
@@ -117,18 +134,15 @@ function hf_tools_listings_public( WP_REST_Request $req ) {
 	global $wpdb;
 	$page = max( 1, (int) $req->get_param( 'page' ) );
 	$per = min( 500, max( 1, (int) ( $req->get_param( 'per_page' ) ?: 500 ) ) );
-	$cache_key = 'hf_tools_lp_' . $page . '_' . $per;
+	$cache_key = 'hf_tools_lp2_' . $page . '_' . $per;
 	$hit = get_transient( $cache_key );
 	if ( false !== $hit ) { return $hit; }
 
 	$content = hf_tools_table( 'content' );
 	if ( ! $content ) { return new WP_Error( 'no_jreviews', 'JReviews tables not found', array( 'status' => 500 ) ); }
 	$f = hf_tools_fieldmap();
-	$extra = array();
-	foreach ( array( 'state', 'city', 'county', 'species', 'featured', 'lat', 'lng' ) as $k ) {
-		if ( $f[ $k ] ) { $extra[] = 'c.`' . esc_sql( $f[ $k ] ) . '` AS `hf_' . $k . '`'; }
-	}
-	$cols = $extra ? ', ' . implode( ', ', $extra ) : '';
+	$need = array_unique( array_merge( $f['state'], $f['city'], $f['county'], $f['species'], $f['featured'], $f['lat'], $f['lng'] ) );
+	$cols = $need ? ', ' . implode( ', ', array_map( function ( $c ) { return 'c.`' . esc_sql( $c ) . '`'; }, $need ) ) : '';
 	$offset = ( $page - 1 ) * $per;
 	$rows = $wpdb->get_results( $wpdb->prepare(
 		"SELECT p.ID, p.post_title, p.post_excerpt, p.post_content, p.post_author {$cols}
@@ -159,15 +173,15 @@ function hf_tools_listings_public( WP_REST_Request $req ) {
 			'url'       => get_permalink( (int) $r['ID'] ),
 			'directory' => $cat && isset( $dirs[ $cat->term_id ] ) ? $dirs[ $cat->term_id ] : '',
 			'category'  => $cat ? html_entity_decode( $cat->name, ENT_QUOTES ) : '',
-			'state'     => isset( $r['hf_state'] ) ? hf_tools_clean_value( $r['hf_state'] ) : '',
-			'city'      => isset( $r['hf_city'] ) ? hf_tools_clean_value( $r['hf_city'] ) : '',
-			'county'    => isset( $r['hf_county'] ) ? hf_tools_clean_value( $r['hf_county'] ) : '',
-			'species'   => isset( $r['hf_species'] ) ? strtolower( hf_tools_clean_value( $r['hf_species'] ) ) : '',
+			'state'     => hf_tools_value( $r, $f['state'] ),
+			'city'      => hf_tools_value( $r, $f['city'] ),
+			'county'    => hf_tools_value( $r, $f['county'] ),
+			'species'   => strtolower( hf_tools_value( $r, $f['species'], true ) ),
 			'summary'   => html_entity_decode( $summary, ENT_QUOTES ),
-			'featured'  => ! empty( $r['hf_featured'] ),
+			'featured'  => $f['featured'] && ! empty( $r['featured'] ),
 			'claimed'   => ! in_array( (int) $r['post_author'], array_map( 'intval', $admins ), true ),
-			'lat'       => isset( $r['hf_lat'] ) && is_numeric( $r['hf_lat'] ) ? (float) $r['hf_lat'] : null,
-			'lng'       => isset( $r['hf_lng'] ) && is_numeric( $r['hf_lng'] ) ? (float) $r['hf_lng'] : null,
+			'lat'       => ( $lat = hf_tools_value( $r, $f['lat'] ) ) && is_numeric( $lat ) ? (float) $lat : null,
+			'lng'       => ( $lng = hf_tools_value( $r, $f['lng'] ) ) && is_numeric( $lng ) ? (float) $lng : null,
 		);
 	}
 	$result = array( 'listings' => $out, 'more' => $more, 'page' => $page );
@@ -178,7 +192,7 @@ function hf_tools_listings_public( WP_REST_Request $req ) {
 /** Admin check: which JReviews fields the tools picked, and the inquiry table's columns. */
 function hf_tools_check() {
 	return array(
-		'version'          => '1.0.0',
+		'version'          => '1.0.3',
 		'fields'           => hf_tools_fieldmap(),
 		'content_columns'  => hf_tools_columns( hf_tools_table( 'content' ) ),
 		'inquiry_columns'  => hf_tools_columns( hf_tools_table( 'inquiry' ) ),
@@ -265,7 +279,7 @@ function hf_tools_settings_page() {
 		foreach ( array( 'state_col', 'city_col', 'county_col', 'species_col' ) as $k ) { $s[ $k ] = sanitize_key( wp_unslash( $_POST[ $k ] ?? '' ) ); }
 		if ( ! $s['key'] ) { $s['key'] = wp_generate_password( 40, false, false ); }
 		update_option( HF_TOOLS_OPT, $s, false );
-		foreach ( range( 1, 40 ) as $p ) { delete_transient( 'hf_tools_lp_' . $p . '_500' ); }
+		foreach ( range( 1, 40 ) as $p ) { delete_transient( 'hf_tools_lp2_' . $p . '_500' ); }
 		echo '<div class="updated"><p>Saved.</p></div>';
 	}
 	$f = hf_tools_fieldmap();
@@ -283,10 +297,23 @@ function hf_tools_settings_page() {
 	<p class="description">Owners can turn it off for one listing with the custom field <code>hf_instant_reply_off</code> = 1.</p></td></tr>
 	<tr><th>JReviews fields</th><td>
 	<?php foreach ( array( 'state', 'city', 'county', 'species' ) as $k ) : ?>
-		<label><?php echo esc_html( ucfirst( $k ) ); ?> <input name="<?php echo esc_attr( $k ); ?>_col" value="<?php echo esc_attr( $s[ $k . '_col' ] ); ?>" placeholder="<?php echo esc_attr( $f[ $k ] ?: 'not found' ); ?>"></label><br>
+		<label><?php echo esc_html( ucfirst( $k ) ); ?> <input name="<?php echo esc_attr( $k ); ?>_col" value="<?php echo esc_attr( $s[ $k . '_col' ] ); ?>" placeholder="<?php echo esc_attr( $f[ $k ] ? implode( ', ', $f[ $k ] ) : 'not found' ); ?>"></label><br>
 	<?php endforeach; ?>
 	<p class="description">Leave blank to use the field shown in grey. Featured flag: <?php echo $f['featured'] ? 'found' : 'not found'; ?>.</p></td></tr>
 	</table>
 	<p><button class="button button-primary" name="hf_tools_save" value="1">Save</button></p></form></div>
 	<?php
 }
+
+/* ---------- "Ask Horn & Fin" banner on the homepage (shows only once the tools page is published) ---------- */
+
+add_action( 'wp_body_open', function () {
+	if ( ! is_front_page() ) { return; }
+	$page = get_page_by_path( HF_TOOLS_PAGE_SLUG );
+	if ( ! $page || 'publish' !== $page->post_status ) { return; }
+	$url = esc_url( get_permalink( $page ) . '#ask' );
+	echo '<div class="hf-ask-banner" style="background:#ff6a13;color:#15211c;font:600 15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:9px 16px">'
+		. '<a href="' . $url . '" style="color:#15211c;text-decoration:none">'
+		. '<strong style="font-size:16px">Ask Horn &amp; Fin</strong> &nbsp;Rules, seasons, draw odds and where to fish, answered with the rulebook page. '
+		. '<span style="white-space:nowrap">Ask a question &rarr;</span></a></div>';
+}, 20 );
