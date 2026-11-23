@@ -6,7 +6,7 @@ import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
 import { hfAdmin, hfRoute } from './hf/routes';
 import { hfToolsJs } from './hf/widget';
-import { syncListings } from './hf/data';
+import { importNextRulebook, syncListings } from './hf/data';
 import { checkStocking, sendStockingAlerts } from './hf/stocking';
 import { loadDeadlines, sendDeadlineReminders, upcomingDeadlines } from './reminders';
 import { costsPage, loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
@@ -657,6 +657,11 @@ async function internalRunChecks(env: Env, req: Request): Promise<Response> {
 /** Trout stocking reports (each source has its own interval), then any alerts for new stockings. Never blocks tag checks. */
 async function stockingRun(env: Env): Promise<void> {
   try {
+    const book = await importNextRulebook(env).catch((err) => `rulebook import crashed: ${err}`);
+    if (book) console.log(`rulebook: ${book}`);
+    // First run after setup: copy the listings now instead of waiting for the morning job.
+    const have = await env.DB.prepare('SELECT COUNT(*) AS n FROM hf_listings').first<{ n: number }>().catch(() => null);
+    if (have && have.n === 0) console.log('listings first sync', JSON.stringify(await syncListings(env)));
     const r = await checkStocking(env);
     if (r.checked) console.log(`stocking: ${r.checked} reports read, ${r.added} new rows${r.errors.length ? `, errors: ${r.errors.join('; ')}` : ''}`);
     if (r.added) {

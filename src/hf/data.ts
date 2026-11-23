@@ -180,3 +180,20 @@ export async function pointsReport(env: Env, subId: string): Promise<unknown[]> 
   }
   return out;
 }
+
+/** Import the next waiting rulebook (one per run keeps each run short). */
+export async function importNextRulebook(env: Env): Promise<string | null> {
+  const next = await env.DB.prepare("SELECT * FROM hf_rulebook_queue WHERE status = 'waiting' ORDER BY id LIMIT 1").first<{
+    id: number; state: string; year: string; book: string; url: string; page_offset: number;
+  }>();
+  if (!next) return null;
+  try {
+    const r = await importRulebook(env, { state: next.state, year: next.year, book: next.book, url: next.url, pageOffset: next.page_offset });
+    await env.DB.prepare("UPDATE hf_rulebook_queue SET status = 'done', result = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(r), nowIso(), next.id).run();
+    return `${next.book}: ${r.pages} pages, ${r.passages} passages`;
+  } catch (err) {
+    const msg = String(err instanceof Error ? err.message : err).slice(0, 300);
+    await env.DB.prepare("UPDATE hf_rulebook_queue SET status = 'failed', result = ?, updated_at = ? WHERE id = ?").bind(msg, nowIso(), next.id).run();
+    return `${next.book} failed: ${msg}`;
+  }
+}
