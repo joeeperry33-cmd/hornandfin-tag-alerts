@@ -34,7 +34,7 @@ var CSS='.hft{font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 '.hft .out{margin-top:16px;border-left:4px solid #2f7d5b;padding:4px 14px;background:#f5f8f4;border-radius:0 5px 5px 0}.hft .out:empty{display:none}'+
 '.hft .out h4{margin:14px 0 4px;color:#1f3d35}.hft .err{color:#b3261e;font-size:14px;margin-top:8px}.hft .ok{background:#dcefe2;border-radius:6px;padding:12px;color:#1f3d35;margin-top:10px}'+
 '.hft table{width:100%;border-collapse:collapse;font-size:14px}.hft th,.hft td{text-align:left;padding:6px;border-bottom:1px solid #e4e9e1}.hft th{color:#4f5c55}'+
-'.hft .fine{font-size:12px;color:#5b6b5e;margin-top:12px}.hft .chat{max-height:420px;overflow:auto;margin-bottom:10px}.hft .me{background:#e4e9e1;border-radius:6px;padding:8px 12px;margin:8px 0 8px 15%}'+
+'.hft .fine{font-size:12px;color:#5b6b5e;margin-top:12px}.hft .chat{margin-bottom:10px}.hft .me{background:#e4e9e1;border-radius:6px;padding:8px 12px;margin:8px 0 8px 15%}'+
 '.hft .hp{position:absolute;left:-9999px}.hft .pts td input{width:70px}';
 var TABS=[['plan','Plan a Hunt'],['ask','Ask Horn & Fin'],['odds','Draw Odds & Points'],['dates','Deadlines & Reminders'],['stocking','Stocking Alerts'],['returned','Returned Tags']];
 function mount(root){if(root.dataset.mounted)return;root.dataset.mounted='1';var pre=(root.dataset.state||'').toUpperCase();
@@ -59,8 +59,8 @@ post('/api/hf/plan',d).then(function(j){out.innerHTML=md(j.answer);}).catch(func
 ask:function(p){p.innerHTML='<h3>Ask Horn & Fin</h3><p class="lead">Rules, seasons, draw odds, where to fish, who to call. Answers cite the state rulebook page.</p><div class="chat"></div>'+
 '<form><textarea name="q" rows="2" placeholder="Do I need blaze orange for archery elk in Colorado?"></textarea><br><button class="go">Ask</button><div class="err"></div></form><p class="fine">Rules answers aren\'t legal advice. Check the current regulations before you hunt or fish.</p>';
 var hist=[];var chat=p.querySelector('.chat'),f=p.querySelector('form');f.onsubmit=function(e){e.preventDefault();var q=f.q.value.trim();if(!q)return;f.q.value='';hist.push({role:'user',content:q});
-chat.appendChild(el('div',{class:'me'},esc(q)));var a=el('div',{class:'out'},'<p>Looking that up...</p>');chat.appendChild(a);chat.scrollTop=chat.scrollHeight;var b=f.querySelector('.go');b.disabled=true;
-post('/api/hf/ask',{messages:hist}).then(function(j){a.innerHTML=md(j.answer);hist.push({role:'assistant',content:j.answer});}).catch(function(x){a.innerHTML='<p class="err">'+esc(x.message)+'</p>';hist.pop();}).then(function(){b.disabled=false;chat.scrollTop=chat.scrollHeight;});};},
+chat.appendChild(el('div',{class:'me'},esc(q)));var a=el('div',{class:'out'},'<p>Looking that up...</p>');chat.appendChild(a);var b=f.querySelector('.go');b.disabled=true;
+post('/api/hf/ask',{messages:hist}).then(function(j){a.innerHTML=md(j.answer);hist.push({role:'assistant',content:j.answer});}).catch(function(x){a.innerHTML='<p class="err">'+esc(x.message)+'</p>';hist.pop();}).then(function(){b.disabled=false;var m=a.previousSibling||a;if(m.scrollIntoView)m.scrollIntoView({behavior:'smooth',block:'start'});});};},
 odds:function(p,pre){var saved=[];try{saved=JSON.parse(localStorage.getItem('hf_points')||'[]');}catch(e){}
 p.innerHTML='<h3>Draw Odds & Points Tracker</h3><p class="lead">Enter the points you hold. We show your best odds from last year\'s draw. Your points stay on this device.</p>'+
 '<table class="pts"><thead><tr><th>State</th><th>Species</th><th>Residency</th><th>Points</th><th></th></tr></thead><tbody></tbody></table><button type="button" class="go add" style="margin-top:10px;background:#e4e9e1">+ Add a state</button> <button type="button" class="go run" style="margin-top:10px">Show my best odds</button><div class="out"></div>'+
