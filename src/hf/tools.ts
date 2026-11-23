@@ -7,7 +7,7 @@ import { STATES } from '../util';
  * Every answer carries its source so replies can cite it. Nothing here invents a number.
  */
 
-const DEFAULT_ODDS_REF = '0a8bccc';
+const DEFAULT_ODDS_REF = '185b857';
 
 export interface DrawRow {
   points: number | null;
