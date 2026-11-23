@@ -105,3 +105,10 @@ describe('mcp server', () => {
     expect(st.result.isError).toBe(true);
   });
 });
+
+import { expandTerms } from '../src/hf/tools';
+describe('rulebook search words', () => {
+  it('maps everyday words to rulebook words', () => {
+    expect(expandTerms(['orange', 'hat'])).toEqual(expect.arrayContaining(['daylight fluorescent', 'head covering', 'orange']));
+  });
+});
