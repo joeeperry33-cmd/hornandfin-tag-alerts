@@ -4,6 +4,7 @@ import { dailyHealth } from './health';
 import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
+import { loadDeadlines, sendDeadlineReminders, upcomingDeadlines } from './reminders';
 import { costsPage, loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, PUBLIC_DELAY_DAYS, robotsTxt, sitemapXml, termsPage } from './site';
 import { verifyTwilioSignature } from './twilio';
@@ -199,6 +200,7 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
   const home = String(b.home_state ?? '').trim().toUpperCase();
   const homeState = STATE_CODES.includes(home) ? home : null;
   const pageAlerts = b.page_alerts === true ? 1 : 0;
+  const reminders = b.deadline_reminders === false ? 0 : 1;
   let phone = sub.phone;
   let consentAt = sub.sms_consent_at;
   let stopped = sub.sms_stopped;
@@ -212,8 +214,8 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
       if (!consentAt || phone !== sub.phone || stopped) { consentAt = nowIso(); stopped = 0; }
     }
   }
-  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, openings = ?, weapons = ?, sexes = ?, home_state = ?, page_alerts = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
-    .bind(states, species, openings, weapons, sexes, homeState, pageAlerts, phone, consentAt, stopped, sub.id)
+  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, openings = ?, weapons = ?, sexes = ?, home_state = ?, page_alerts = ?, deadline_reminders = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
+    .bind(states, species, openings, weapons, sexes, homeState, pageAlerts, reminders, phone, consentAt, stopped, sub.id)
     .run();
   return json({ ok: true });
 }
@@ -312,6 +314,10 @@ export default {
     if (path === '/api/verify') return verify(env, url);
     if (path === '/api/unsubscribe') return unsubscribe(env, url, req);
     if (path === '/api/feed') return feed(env, url, req);
+    if (path === '/api/deadlines') {
+      const list = await upcomingDeadlines(env, { state: url.searchParams.get('state')?.toUpperCase() || undefined, species: url.searchParams.get('species') || undefined });
+      return json({ deadlines: list }, 200, { 'cache-control': 'public, max-age=900', 'access-control-allow-origin': '*' });
+    }
     if (path === '/api/manage' && req.method === 'POST') return manageUpdate(env, req);
     if (path === '/api/sms/inbound' && req.method === 'POST') return smsInbound(env, req);
 
@@ -538,6 +544,12 @@ export default {
         ).all<Source>();
         return json({ sources: results });
       }
+      if (path === '/admin/deadlines' && req.method === 'POST') {
+        return json(await loadDeadlines(env, (await req.json()) as { deadlines?: [] }));
+      }
+      if (path === '/admin/reminders/preview') {
+        return json(await sendDeadlineReminders({ ...env, REMINDERS_LIVE: 'false' }, url.searchParams.get('date') ?? undefined));
+      }
       if (path === '/admin/check' && req.method === 'POST') {
         const result = await runChecks(env, url.searchParams.get('id') ?? undefined);
         ctx.waitUntil(sendInstantAlerts(env));
@@ -575,7 +587,9 @@ export default {
           .then(() => renewalReminders(env))
           .then((n) => n && console.log(`renewal reminders sent: ${n}`))
           .then(() => sendDigests(env))
-          .then((n) => console.log(`digests sent: ${n}`)),
+          .then((n) => console.log(`digests sent: ${n}`))
+          .then(() => sendDeadlineReminders(env))
+          .then((r) => console.log(`deadline reminders: ${r.emails} emails, ${r.sms} texts${r.dryRun ? ' (dry run)' : ''}`)),
       );
       return;
     }

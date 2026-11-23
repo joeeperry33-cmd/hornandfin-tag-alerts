@@ -54,6 +54,10 @@ export interface Env {
   SALE_PRICE?: string;
   SALE_ENDS?: string;
   ADMIN_TOKEN?: string;
+  /** "true" to actually send deadline reminders (otherwise they only log). */
+  REMINDERS_LIVE?: string;
+  /** Claude API key (secret) for the Horn & Fin planner and Ask tools. */
+  ANTHROPIC_API_KEY?: string;
 }
 
 export interface Source {
@@ -108,6 +112,8 @@ export interface Subscriber {
   sexes?: string;
   home_state?: string | null;
   page_alerts?: number;
+  /** 1 = free deadline and draw-result reminders (default). */
+  deadline_reminders?: number;
 }
 
 export interface AlertEvent {
