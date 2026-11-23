@@ -107,6 +107,9 @@ ${plan}
 <div class="sub">Page-change alerts</div>
 <label class="chk"><input type="checkbox" name="page_alerts" value="1"${sub.page_alerts ? ' checked' : ''}> Also email me when a state's page changes</label>
 <p class="muted" style="font-size:14px;margin-top:4px">Some states don't post hunt-by-hunt counts, so all we can see is that their page changed. Often it's not a new tag. Leave this off to get alerts only when a hunt opens up or more tags come back.</p></div>
+<div class="panel"><h2>Deadline reminders<span class="pill">Free</span></h2>
+<label class="chk"><input type="checkbox" name="deadline_reminders" value="1"${sub.deadline_reminders === 0 ? '' : ' checked'}> Remind me before draw applications close and when results post</label>
+<p class="muted" style="font-size:14px;margin-top:4px">For the states and species you pick below. Emails 7 days and 1 day before a draw closes, and the day results come out. If you've added a cell number, we also text the day before it closes.</p></div>
 <div class="panel"><h2>States</h2>
 <div class="row" style="margin-bottom:10px"><button type="button" class="linkbtn" data-all="1">Select all</button><button type="button" class="linkbtn" data-all="0">Clear</button></div>
 <div class="grid">${checkboxes('states', states, sub.states)}</div></div>
@@ -123,7 +126,7 @@ form.onsubmit=async e=>{e.preventDefault();errBox.textContent='';
  if(!vals('states').length||!vals('species').length){errBox.textContent='Pick at least one state and one species.';return;}
  if(!vals('openings').length||!vals('weapons').length||!vals('sexes').length){errBox.textContent='Pick at least one option under each tag type.';return;}
  const phone=form.querySelector('[name=phone]');const consent=form.querySelector('[name=sms_consent]');
- try{await post('/api/manage',{states:vals('states'),species:vals('species'),openings:vals('openings'),weapons:vals('weapons'),sexes:vals('sexes'),home_state:form.querySelector('[name=home_state]').value,page_alerts:form.querySelector('[name=page_alerts]').checked,phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
+ try{await post('/api/manage',{states:vals('states'),species:vals('species'),openings:vals('openings'),weapons:vals('weapons'),sexes:vals('sexes'),home_state:form.querySelector('[name=home_state]').value,page_alerts:form.querySelector('[name=page_alerts]').checked,deadline_reminders:form.querySelector('[name=deadline_reminders]').checked,phone:phone?phone.value:undefined,sms_consent:consent?consent.checked:undefined});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;}};
 const cancelBtn=document.getElementById('cancelPlan');if(cancelBtn){let armed=false;cancelBtn.onclick=async()=>{
  if(!armed){armed=true;cancelBtn.textContent='Tap again to cancel your PayPal subscription';return;}
  cancelBtn.disabled=true;try{await post('/api/paypal/cancel',{});location.href='/manage?saved=1';}catch(err){errBox.textContent=err.message;cancelBtn.disabled=false;}};}

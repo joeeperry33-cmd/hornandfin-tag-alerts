@@ -54,6 +54,21 @@ export interface Env {
   SALE_PRICE?: string;
   SALE_ENDS?: string;
   ADMIN_TOKEN?: string;
+  /** "true" to actually send deadline reminders (otherwise they only log). */
+  REMINDERS_LIVE?: string;
+  /** Claude API key (secret) for the Horn & Fin planner and Ask tools. */
+  ANTHROPIC_API_KEY?: string;
+  /** Commit of the hornandfin-draw-odds repo whose data the tools read (same one the draw odds page pins). */
+  DRAW_ODDS_REF?: string;
+  /** Where the nightly listing copy comes from (the Horn & Fin plugin's public export). */
+  HF_LISTINGS_URL?: string;
+  /** Daily limits for the planner and Ask: per visitor, and for the whole site. */
+  HF_DAILY_PER_VISITOR?: string;
+  HF_DAILY_SITE_CALLS?: string;
+  /** "true" to send stocking alerts (otherwise they only log). */
+  STOCKING_LIVE?: string;
+  /** Shared key (secret) the Horn & Fin WordPress plugin sends for inquiry instant replies. */
+  HF_PLUGIN_KEY?: string;
 }
 
 export interface Source {
@@ -108,6 +123,8 @@ export interface Subscriber {
   sexes?: string;
   home_state?: string | null;
   page_alerts?: number;
+  /** 1 = free deadline and draw-result reminders (default). */
+  deadline_reminders?: number;
 }
 
 export interface AlertEvent {

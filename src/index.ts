@@ -4,6 +4,11 @@ import { dailyHealth } from './health';
 import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
 import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
+import { hfAdmin, hfRoute } from './hf/routes';
+import { hfToolsJs } from './hf/widget';
+import { syncListings } from './hf/data';
+import { checkStocking, sendStockingAlerts } from './hf/stocking';
+import { loadDeadlines, sendDeadlineReminders, upcomingDeadlines } from './reminders';
 import { costsPage, loginPage, managePage, messagePage, paypalAdminPage, subscribersCsv, subscribersPage, type SubscriberRow } from './pages';
 import { botPage, faviconSvg, homePage, loadHomeData, privacyPage, PUBLIC_DELAY_DAYS, robotsTxt, sitemapXml, termsPage } from './site';
 import { verifyTwilioSignature } from './twilio';
@@ -199,6 +204,7 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
   const home = String(b.home_state ?? '').trim().toUpperCase();
   const homeState = STATE_CODES.includes(home) ? home : null;
   const pageAlerts = b.page_alerts === true ? 1 : 0;
+  const reminders = b.deadline_reminders === false ? 0 : 1;
   let phone = sub.phone;
   let consentAt = sub.sms_consent_at;
   let stopped = sub.sms_stopped;
@@ -212,8 +218,8 @@ async function manageUpdate(env: Env, req: Request): Promise<Response> {
       if (!consentAt || phone !== sub.phone || stopped) { consentAt = nowIso(); stopped = 0; }
     }
   }
-  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, openings = ?, weapons = ?, sexes = ?, home_state = ?, page_alerts = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
-    .bind(states, species, openings, weapons, sexes, homeState, pageAlerts, phone, consentAt, stopped, sub.id)
+  await env.DB.prepare('UPDATE subscribers SET states = ?, species = ?, openings = ?, weapons = ?, sexes = ?, home_state = ?, page_alerts = ?, deadline_reminders = ?, phone = ?, sms_consent_at = ?, sms_stopped = ?, unsubscribed_at = NULL WHERE id = ?')
+    .bind(states, species, openings, weapons, sexes, homeState, pageAlerts, reminders, phone, consentAt, stopped, sub.id)
     .run();
   return json({ ok: true });
 }
@@ -306,12 +312,19 @@ export default {
     }
 
     if (path === '/internal/run-checks' && req.method === 'POST') return internalRunChecks(env, req);
+    if (path === '/mcp') return (await hfRoute(env, req, url, path, {}))!;
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(env, req) });
+    if (path.startsWith('/api/hf/')) return (await hfRoute(env, req, url, path, cors(env, req)))!;
     if (path === '/widget.js') return widgetJs(env);
+    if (path === '/hf-tools.js') return hfToolsJs(env);
     if (path === '/api/subscribe' && req.method === 'POST') return subscribe(env, req);
     if (path === '/api/verify') return verify(env, url);
     if (path === '/api/unsubscribe') return unsubscribe(env, url, req);
     if (path === '/api/feed') return feed(env, url, req);
+    if (path === '/api/deadlines') {
+      const list = await upcomingDeadlines(env, { state: url.searchParams.get('state')?.toUpperCase() || undefined, species: url.searchParams.get('species') || undefined });
+      return json({ deadlines: list }, 200, { 'cache-control': 'public, max-age=900', 'access-control-allow-origin': '*' });
+    }
     if (path === '/api/manage' && req.method === 'POST') return manageUpdate(env, req);
     if (path === '/api/sms/inbound' && req.method === 'POST') return smsInbound(env, req);
 
@@ -538,6 +551,16 @@ export default {
         ).all<Source>();
         return json({ sources: results });
       }
+      if (path.startsWith('/admin/hf/')) {
+        const r = await hfAdmin(env, req, url, path);
+        if (r) return r;
+      }
+      if (path === '/admin/deadlines' && req.method === 'POST') {
+        return json(await loadDeadlines(env, (await req.json()) as { deadlines?: [] }));
+      }
+      if (path === '/admin/reminders/preview') {
+        return json(await sendDeadlineReminders({ ...env, REMINDERS_LIVE: 'false' }, url.searchParams.get('date') ?? undefined));
+      }
       if (path === '/admin/check' && req.method === 'POST') {
         const result = await runChecks(env, url.searchParams.get('id') ?? undefined);
         ctx.waitUntil(sendInstantAlerts(env));
@@ -575,7 +598,11 @@ export default {
           .then(() => renewalReminders(env))
           .then((n) => n && console.log(`renewal reminders sent: ${n}`))
           .then(() => sendDigests(env))
-          .then((n) => console.log(`digests sent: ${n}`)),
+          .then((n) => console.log(`digests sent: ${n}`))
+          .then(() => syncListings(env))
+          .then((r) => console.log(`listings synced: ${r.listings}${r.error ? ` (error: ${r.error})` : ''}`))
+          .then(() => sendDeadlineReminders(env))
+          .then((r) => console.log(`deadline reminders: ${r.emails} emails, ${r.sms} texts${r.dryRun ? ' (dry run)' : ''}`)),
       );
       return;
     }
@@ -583,6 +610,7 @@ export default {
     // visitors from outside the US. Hand the checks to this Worker's request handler, which runs in
     // the US (see [placement] in wrangler.toml); run them here only if that hand-off fails.
     if (await runChecksInUs(env)) return;
+    await stockingRun(env);
     const result = await runChecks(env);
     const sent = await sendInstantAlerts(env);
     console.log(`checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
@@ -618,9 +646,24 @@ async function internalRunChecks(env: Env, req: Request): Promise<Response> {
   const fresh = row && Date.now() - new Date(row.updated_at).getTime() < 120_000;
   if (!given || !row || !fresh || given !== row.value) return new Response('Not found', { status: 404 });
   await env.DB.prepare('DELETE FROM settings WHERE key = ?').bind(RUN_TOKEN_KEY).run();
+  await stockingRun(env);
   const result = await runChecks(env);
   const sent = await sendInstantAlerts(env);
   const placed = req.headers.get('cf-placement') ?? 'unknown';
   console.log(`[${placed}] checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
   return Response.json({ placed, ...result, emails: sent.emails, sms: sent.sms });
+}
+
+/** Trout stocking reports (each source has its own interval), then any alerts for new stockings. Never blocks tag checks. */
+async function stockingRun(env: Env): Promise<void> {
+  try {
+    const r = await checkStocking(env);
+    if (r.checked) console.log(`stocking: ${r.checked} reports read, ${r.added} new rows${r.errors.length ? `, errors: ${r.errors.join('; ')}` : ''}`);
+    if (r.added) {
+      const sent = await sendStockingAlerts(env);
+      console.log(`stocking alerts: ${sent.emails} emails, ${sent.sms} texts${sent.dryRun ? ' (dry run)' : ''}`);
+    }
+  } catch (err) {
+    console.error('stocking run failed', err);
+  }
 }
