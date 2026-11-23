@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { SPECIES, SPECIES_LABEL, STATES } from '../util';
 
 /**
- * The Ultimate Hunting and Fishing Resource: every Horn & Fin tool in one embeddable block.
+ * Horn & Fin Field Kit (the ultimate hunting and fishing resource): every Horn & Fin tool in one embeddable block.
  *   <div id="hf-tools"></div><script src="https://leftovertagalerts.com/hf-tools.js" async></script>
  * Optional data-tab="plan|ask|odds|dates|stocking|returned" opens a tab; data-state="CO" preselects a state.
  * Plain JS (no template literals) so it can live inside this TypeScript string.
@@ -21,7 +21,7 @@ function post(path,body){return fetch(API+path,{method:'POST',headers:{'content-
 function get(path){return fetch(API+path).then(function(r){return r.json();});}
 var CSS='.hft{font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#15211c;max-width:960px;margin:0 auto}'+
 '.hft *{box-sizing:border-box}.hft .hero{background:#1f3d35;color:#fff;border-radius:6px 6px 0 0;padding:22px 22px 16px}'+
-'.hft .hero h2{margin:0 0 4px;font-size:26px;color:#fff}.hft .hero p{margin:0;color:#d6e2da}'+
+'.hft .hero h2{margin:0 0 4px;font-size:26px;color:#fff}.hft .hero p{margin:0;color:#d6e2da}.hft .hero p.sub{margin:0 0 8px;color:#f0a35e;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:13px}'+
 '.hft .free{display:inline-block;background:#ff6a13;color:#15211c;font-weight:700;font-size:13px;letter-spacing:.3px;padding:3px 10px;border-radius:3px;margin-bottom:10px;text-transform:uppercase}'+
 '.hft .tabs{display:flex;flex-wrap:wrap;gap:4px;background:#173029;padding:8px 10px}'+
 '.hft .tabs button{background:transparent;border:0;color:#d6e2da;padding:8px 12px;font-weight:600;font-size:14px;border-radius:3px;cursor:pointer}'+
@@ -39,7 +39,7 @@ var CSS='.hft{font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 var TABS=[['plan','Plan a Hunt'],['ask','Ask Horn & Fin'],['odds','Draw Odds & Points'],['dates','Deadlines & Reminders'],['stocking','Stocking Alerts'],['returned','Returned Tags']];
 function mount(root){if(root.dataset.mounted)return;root.dataset.mounted='1';var pre=(root.dataset.state||'').toUpperCase();
 root.appendChild(el('style',{},CSS));var w=el('div',{class:'hft'});root.appendChild(w);
-w.innerHTML='<div class="hero"><span class="free">Free for a limited time</span><h2>The Ultimate Hunting and Fishing Resource</h2><p>Plan hunts, check draw odds, never miss a deadline and know when your water gets stocked. All free for a limited time.</p></div>'+
+w.innerHTML='<div class="hero"><p class="sub">Horn &amp; Fin Field Kit</p><p>Plan hunts, check draw odds, never miss a deadline and know when your water gets stocked.</p></div>'+
 '<div class="tabs" role="tablist">'+TABS.map(function(t){return '<button role="tab" data-t="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div><div class="pane"></div>';
 var pane=w.querySelector('.pane');var btns=w.querySelectorAll('.tabs button');
 function show(t){for(var i=0;i<btns.length;i++)btns[i].setAttribute('aria-selected',btns[i].dataset.t===t?'true':'false');pane.innerHTML='';VIEWS[t](pane,pre);try{history.replaceState(null,'','#'+t);}catch(e){}}
@@ -74,14 +74,14 @@ try{localStorage.setItem('hf_points',JSON.stringify(rows));}catch(e){}out.innerH
 Promise.all(rows.map(function(r){return get('/api/hf/odds?state='+r.state+'&species='+r.species+'&points='+r.points+'&residency='+r.residency).then(function(j){return{r:r,j:j};});})).then(function(all){
 out.innerHTML=all.map(function(x){var j=x.j,r=x.r;if(j.error)return '<h4>'+esc(r.state)+' '+esc(SPL[r.species]||r.species)+'</h4><p>'+esc(j.error)+'</p>';var top=(j.hunts||[]).filter(function(h){return h.odds.pct>0;}).slice(0,5);
 return '<h4>'+esc(j.state)+' '+esc(SPL[r.species]||r.species)+', '+r.points+' points</h4>'+(top.length?'<table><tr><th>Hunt</th><th>Last-draw odds</th><th>Tags</th></tr>'+top.map(function(h){return '<tr><td>'+esc(h.id)+'<br><span style="color:#5b6b5e">'+esc(h.name)+'</span></td><td><strong>'+h.odds.pct+'%</strong></td><td>'+(h.tags==null?'':h.tags)+'</td></tr>';}).join('')+'</table>':'<p>No hunts drew at your point level last year. Keep building points, or look at leftover and returned tags.</p>')+'<p class="fine">'+esc(j.draw||'')+'</p>';}).join('');});};},
-dates:function(p,pre){p.innerHTML='<h3>Deadlines & Reminders</h3><p class="lead">Free reminders 7 days and 1 day before draws close, and the day results post. Free for a limited time.</p>'+
+dates:function(p,pre){p.innerHTML='<h3>Deadlines & Reminders</h3><p class="lead">Reminders 7 days and 1 day before draws close, and the day results post.</p>'+
 '<form><div class="row"><div><label>Email<input name="email" type="email" required placeholder="you@example.com"></label></div><div><label>State<select name="state">'+stateOpts(pre)+'</select></label></div><div><label>Species<select name="species"><option value="">All species</option>'+spOpts()+'</select></label></div></div>'+
 '<input class="hp" name="website" tabindex="-1" autocomplete="off"><button class="go">Remind me</button><div class="err"></div></form><div class="list" style="margin-top:16px"></div>';
 var f=p.querySelector('form'),list=p.querySelector('.list');function load(){var st=f.state.value;get('/api/deadlines'+(st?'?state='+st:'')).then(function(j){var d=j.deadlines||[];
 list.innerHTML=d.length?'<table><tr><th>Date</th><th>State</th><th>What</th></tr>'+d.slice(0,40).map(function(x){return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.state)+'</td><td><a href="'+esc(x.link_url)+'" target="_blank" rel="noopener">'+esc(x.title)+'</a></td></tr>';}).join('')+'</table>':'<p class="fine">We add dates as each state confirms them. Sign up and we\'ll remind you as soon as they\'re set.</p>';});}
 f.state.onchange=load;load();f.onsubmit=function(e){e.preventDefault();var b=f.querySelector('.go');b.disabled=true;
 post('/api/subscribe',{email:f.email.value,states:f.state.value?[f.state.value]:STATES.map(function(s){return s[0];}),species:f.species.value?[f.species.value]:SPECIES,website:f.website.value}).then(function(){f.outerHTML='<div class="ok">Check your email and click the link to turn on your free reminders.</div>';}).catch(function(x){f.querySelector('.err').textContent=x.message;b.disabled=false;});};},
-stocking:function(p,pre){p.innerHTML='<h3>Stocking Alerts</h3><p class="lead">Pick a lake, stream or whole county. We email you when the state stocks it, with guides and shops nearby. Free for a limited time.</p>'+
+stocking:function(p,pre){p.innerHTML='<h3>Stocking Alerts</h3><p class="lead">Pick a lake, stream or whole county. We email you when the state stocks it, with guides and shops nearby.</p>'+
 '<form><div class="row"><div><label>State<select name="state" required>'+stateOpts(pre)+'</select></label></div><div><label>Lake or stream<input name="water" list="hf-waters" placeholder="Start typing a water"></label><datalist id="hf-waters"></datalist></div><div><label>Or whole county<input name="county" placeholder="Placer"></label></div></div>'+
 '<div class="row"><div><label>Email<input name="email" type="email" required placeholder="you@example.com"></label></div></div><input class="hp" name="website" tabindex="-1" autocomplete="off"><button class="go">Alert me</button><div class="err"></div></form><div class="out"></div>';
 var f=p.querySelector('form'),dl=p.querySelector('datalist'),out=p.querySelector('.out'),t;f.water.oninput=function(){clearTimeout(t);t=setTimeout(function(){if(!f.state.value||f.water.value.length<2)return;get('/api/hf/stocking/waters?state='+f.state.value+'&q='+encodeURIComponent(f.water.value)).then(function(j){dl.innerHTML=(j.waters||[]).map(function(w){return '<option value="'+esc(w.water)+'">'+esc(w.county?w.county+' County':'')+'</option>';}).join('');});},250);};

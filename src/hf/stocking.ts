@@ -271,7 +271,7 @@ export async function sendStockingAlerts(env: Env): Promise<{ emails: number; sm
           .map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1f3d35">${escapeHtml(l.title)}</a>${l.featured ? ' <span style="color:#5b6b5e">(Featured)</span>' : ''}`)
           .join('<br>')}</div>`
       : '';
-    const inner = `<div style="font-size:14px;color:#5b6b5e;margin-bottom:14px">Free for a limited time: stocking alerts for the waters you follow.</div>
+    const inner = `<div style="font-size:14px;color:#5b6b5e;margin-bottom:14px">Stocking alerts for the waters you follow.</div>
 ${list.map((s) => `<div style="border-left:4px solid #2f7d5b;padding:8px 12px;margin:0 0 12px;font-size:16px">${escapeHtml(line(s))}<br><a href="${escapeHtml(s.link_url)}" style="font-size:14px;color:#1f3d35">State stocking report</a></div>`).join('')}
 ${nearbyHtml}
 <div style="font-size:12px;color:#5b6b5e;margin-top:14px">From the ${escapeHtml(STATES[first.state] ?? first.state)} stocking report. Check current fishing rules before you go.</div>`;

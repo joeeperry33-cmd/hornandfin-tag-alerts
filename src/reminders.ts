@@ -114,7 +114,7 @@ function reminderBlock(r: DueReminder): string {
 }
 
 export function reminderEmail(env: Env, sub: Subscriber, list: DueReminder[]): EmailMessage {
-  const inner = `<div style="font-size:14px;color:#5b6b5e;margin-bottom:16px">Free for a limited time: reminders for the states and species you follow.</div>
+  const inner = `<div style="font-size:14px;color:#5b6b5e;margin-bottom:16px">Reminders for the states and species you follow.</div>
 ${list.map(reminderBlock).join('')}
 <div style="font-size:12px;color:#5b6b5e">Dates come from each state's wildlife agency. Always confirm on the official page before you apply. We never apply or buy tags for you.</div>`;
   const text =

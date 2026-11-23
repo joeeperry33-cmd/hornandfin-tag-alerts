@@ -36,7 +36,7 @@ register_activation_hook( __FILE__, function () {
 			'post_status'  => 'draft',
 			'post_title'   => 'The Ultimate Hunting and Fishing Resource',
 			'post_name'    => HF_TOOLS_PAGE_SLUG,
-			'post_content' => "<!-- wp:paragraph --><p><strong>Free for a limited time.</strong> Plan your next hunt, check draw odds at your points, get deadline reminders and know when your favorite water gets stocked.</p><!-- /wp:paragraph -->\n<!-- wp:shortcode -->[hf_resource]<!-- /wp:shortcode -->",
+			'post_content' => "<!-- wp:paragraph --><p>The ultimate hunting and fishing resource. Plan your next hunt, check draw odds at your points, get deadline reminders and know when your favorite water gets stocked.</p><!-- /wp:paragraph -->\n<!-- wp:shortcode -->[hf_resource]<!-- /wp:shortcode -->",
 		) );
 	}
 } );
