@@ -35,6 +35,21 @@ export interface StockingConfig {
   quantity?: string;
   /** Fixed species when the report doesn't say. */
   fixedSpecies?: string;
+  /** Regex with named groups (water, county) applied to the water cell, for reports that pack both into one cell. */
+  waterRegex?: string;
+  /** County codes used inside the water cell, e.g. {"CLAR":"Clark"}. */
+  countyCodes?: Record<string, string>;
+}
+
+/** Split a packed water cell like "BATTLE GROUND LK (CLAR) Clark Region 5" into water and county. */
+export function splitWater(cell: string, cfg: StockingConfig): { water: string; county: string | null } {
+  if (!cfg.waterRegex) return { water: cell, county: null };
+  const m = cell.match(new RegExp(cfg.waterRegex));
+  if (!m?.groups) return { water: cell, county: null };
+  const water = (m.groups.water ?? cell).replace(/\s+/g, ' ').trim();
+  let county = m.groups.county?.trim() || null;
+  if (county && cfg.countyCodes?.[county.toUpperCase()]) county = cfg.countyCodes[county.toUpperCase()];
+  return { water, county };
 }
 
 export interface Stocking {
@@ -85,12 +100,13 @@ export function stockingsFromTable(table: Table, cfg: StockingConfig): Stocking[
   const q = col(header, cfg.quantity);
   const out: Stocking[] = [];
   for (const r of rows) {
-    const water = (r[w] ?? '').trim();
-    if (!water) continue;
+    const cell = (r[w] ?? '').replace(/\s+/g, ' ').trim();
+    if (!cell) continue;
+    const packed = splitWater(cell, cfg);
     const qty = q >= 0 ? parseInt((r[q] ?? '').replace(/[^0-9]/g, ''), 10) : NaN;
     out.push({
-      water: water.slice(0, 140),
-      county: c >= 0 ? (r[c] ?? '').trim().replace(/ county$/i, '') || null : null,
+      water: packed.water.slice(0, 140),
+      county: c >= 0 ? (r[c] ?? '').trim().replace(/ county$/i, '') || null : packed.county,
       species: sp >= 0 ? (r[sp] ?? '').trim() || null : cfg.fixedSpecies ?? null,
       quantity: Number.isFinite(qty) ? qty : null,
       stocked_on: d >= 0 ? parseStockDate(r[d]) : null,
