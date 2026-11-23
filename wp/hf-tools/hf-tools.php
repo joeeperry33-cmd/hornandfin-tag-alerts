@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Horn & Fin - Ultimate Hunting and Fishing Resource
  * Description: The free hunting and fishing tools page (Plan a Hunt, Ask Horn & Fin, Draw Odds & Points, Deadlines & Reminders, Stocking Alerts, Returned Tags). Use the [hf_resource] shortcode. Also shares public listing facts with the tools and can send hunters an instant thank-you when they contact a listing (off until turned on).
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Horn & Fin
  */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -192,7 +192,7 @@ function hf_tools_listings_public( WP_REST_Request $req ) {
 /** Admin check: which JReviews fields the tools picked, and the inquiry table's columns. */
 function hf_tools_check() {
 	return array(
-		'version'          => '1.0.1',
+		'version'          => '1.0.2',
 		'fields'           => hf_tools_fieldmap(),
 		'content_columns'  => hf_tools_columns( hf_tools_table( 'content' ) ),
 		'inquiry_columns'  => hf_tools_columns( hf_tools_table( 'inquiry' ) ),
@@ -304,3 +304,16 @@ function hf_tools_settings_page() {
 	<p><button class="button button-primary" name="hf_tools_save" value="1">Save</button></p></form></div>
 	<?php
 }
+
+/* ---------- "Ask Horn & Fin" banner on the homepage (shows only once the tools page is published) ---------- */
+
+add_action( 'wp_body_open', function () {
+	if ( ! is_front_page() ) { return; }
+	$page = get_page_by_path( HF_TOOLS_PAGE_SLUG );
+	if ( ! $page || 'publish' !== $page->post_status ) { return; }
+	$url = esc_url( get_permalink( $page ) . '#ask' );
+	echo '<div class="hf-ask-banner" style="background:#ff6a13;color:#15211c;font:600 15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:9px 16px">'
+		. '<a href="' . $url . '" style="color:#15211c;text-decoration:none">'
+		. '<strong style="font-size:16px">Ask Horn &amp; Fin</strong> &nbsp;Rules, seasons, draw odds and where to fish, answered with the rulebook page. '
+		. '<span style="white-space:nowrap">Free for a limited time &rarr;</span></a></div>';
+}, 20 );
