@@ -3,7 +3,7 @@ import { readPdfListings } from './parsers/brightdata';
 import { dailyHealth } from './health';
 import { readSource, runChecks } from './check';
 import { OPENINGS, SEX_CHOICES, WEAPON_CHOICES } from './tagtype';
-import { sendDigests, sendInstantAlerts, sendSignInLink, sendVerification } from './notify';
+import { sendDigests, sendInstantAlerts, sendReminderConfirm, sendSignInLink, sendVerification } from './notify';
 import { hfAdmin, hfRoute } from './hf/routes';
 import { hfToolsJs } from './hf/widget';
 import { importNextRulebook, syncListings } from './hf/data';
@@ -127,7 +127,14 @@ async function subscribe(env: Env, req: Request): Promise<Response> {
 
   const states = parseList(b.states, STATE_CODES, true);
   const species = parseList(b.species, SPECIES, false);
+  // Field Kit deadline reminders sign up through here too, but get a Horn & Fin confirmation that turns
+  // reminders on and lands back on the Field Kit instead of the paid tag alerts page.
+  const forReminders = b.source === 'reminders';
   const existing = await env.DB.prepare('SELECT * FROM subscribers WHERE email = ?').bind(email).first<Subscriber>();
+  if (existing && forReminders) {
+    await sendReminderConfirm(env, existing);
+    return json({ ok: true }, 200, h);
+  }
   if (existing) {
     // Never change an existing account from an unauthenticated form. Confirmed subscribers get a
     // sign-in link instead; unconfirmed ones get a fresh confirmation link. The response is the same
@@ -157,7 +164,7 @@ async function subscribe(env: Env, req: Request): Promise<Response> {
   )
     .bind(sub.id, sub.email, sub.states, sub.species, sub.verify_token, sub.manage_token, sub.created_at)
     .run();
-  await sendVerification(env, sub);
+  await (forReminders ? sendReminderConfirm(env, sub) : sendVerification(env, sub));
   return json({ ok: true }, 200, h);
 }
 
@@ -165,9 +172,15 @@ async function verify(env: Env, url: URL): Promise<Response> {
   const token = url.searchParams.get('token') ?? '';
   const sub = token.length >= 20 ? await env.DB.prepare('SELECT * FROM subscribers WHERE verify_token = ?').bind(token).first<Subscriber>() : null;
   if (!sub) return messagePage(env, 'Link expired', 'That confirmation link is no longer valid. Sign up again on the <a href="/">home page</a> to get a fresh one.');
-  await env.DB.prepare('UPDATE subscribers SET verified_at = COALESCE(verified_at, ?), unsubscribed_at = NULL, verify_token = ? WHERE id = ?')
+  const next = url.searchParams.get('next');
+  await env.DB.prepare(
+    `UPDATE subscribers SET verified_at = COALESCE(verified_at, ?), unsubscribed_at = NULL, verify_token = ?${next === 'reminders' ? ', deadline_reminders = 1' : ''} WHERE id = ?`,
+  )
     .bind(nowIso(), randomToken(), sub.id)
     .run();
+  // Field Kit sign-ups (free reminders, stocking alerts) go back to the Field Kit, not the paid alerts page.
+  if (next === 'reminders') return Response.redirect('https://hornandfin.com/ultimate-hunting-fishing-resource/?reminders=confirmed#dates', 302);
+  if (next === 'stocking') return Response.redirect('https://hornandfin.com/ultimate-hunting-fishing-resource/?stocking=confirmed#stocking', 302);
   return Response.redirect(`${env.API_URL}/manage?token=${encodeURIComponent(sub.manage_token)}&welcome=1`, 302);
 }
 

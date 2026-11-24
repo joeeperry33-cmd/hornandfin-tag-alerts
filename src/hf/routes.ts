@@ -55,7 +55,7 @@ export async function hfRoute(env: Env, req: Request, url: URL, path: string, co
     const token = url.searchParams.get('token') ?? '';
     if (token.length < 20) return new Response('Link expired', { status: 400 });
     await env.DB.prepare('UPDATE stocking_follows SET confirm_token = NULL WHERE confirm_token = ?').bind(token).run();
-    return Response.redirect('https://hornandfin.com/ultimate-hunting-fishing-resource/?stocking=confirmed', 302);
+    return Response.redirect('https://hornandfin.com/ultimate-hunting-fishing-resource/?stocking=confirmed#stocking', 302);
   }
   if (sub === 'points') {
     const token = String(req.method === 'POST' ? b.token ?? '' : url.searchParams.get('token') ?? '');
@@ -119,7 +119,7 @@ async function stockingFollow(env: Env, b: Record<string, unknown>, cors: Record
   const what = water || `every stocked water in ${county} County`;
   const link = confirm
     ? `${env.API_URL}/api/hf/stocking/confirm?token=${encodeURIComponent(confirm)}`
-    : `${env.API_URL}/api/verify?token=${encodeURIComponent(sub!.verify_token)}`;
+    : `${env.API_URL}/api/verify?token=${encodeURIComponent(sub!.verify_token)}&next=stocking`;
   await sendEmails(env, [
     {
       to: email,
