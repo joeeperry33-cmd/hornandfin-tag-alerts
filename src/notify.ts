@@ -308,6 +308,20 @@ export async function sendVerification(env: Env, sub: Subscriber): Promise<boole
   return ok;
 }
 
+/** Horn & Fin Field Kit deadline reminders: confirm link that lands back on the Field Kit, not the paid alerts page. */
+export async function sendReminderConfirm(env: Env, sub: Subscriber): Promise<boolean> {
+  const url = `${env.API_URL}/api/verify?token=${encodeURIComponent(sub.verify_token)}&next=reminders`;
+  const html = `<div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#15211c">
+<div style="font-weight:bold;font-size:18px;margin-bottom:8px">Horn &amp; Fin deadline reminders</div>
+Confirm your email and we'll remind you 7 days and 1 day before draw applications close, and the day results post.
+<p><a href="${url}" style="display:inline-block;background:#ff6a13;color:#15211c;text-decoration:none;padding:10px 16px;border-radius:3px;font-weight:bold">Confirm my reminders</a></p>
+<div style="font-size:13px;color:#5b6b5e">Didn't sign up? Ignore this email and you won't hear from us.</div></div>`;
+  const [ok] = await sendEmails(env, [
+    { to: sub.email, subject: 'Confirm your Horn & Fin deadline reminders', html, text: `Confirm your Horn & Fin deadline reminders: ${url}` },
+  ]);
+  return ok;
+}
+
 export async function sendSignInLink(env: Env, sub: Subscriber): Promise<boolean> {
   const url = `${env.API_URL}/manage?token=${encodeURIComponent(sub.manage_token)}`;
   const inner = `<div style="font-size:16px;line-height:1.5">Here's your link to sign in and change your tag alerts.</div>
