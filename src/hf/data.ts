@@ -183,10 +183,18 @@ export async function pointsReport(env: Env, subId: string): Promise<unknown[]> 
 
 /** Import the next waiting rulebook (one per run keeps each run short). */
 export async function importNextRulebook(env: Env): Promise<string | null> {
+  // A book still marked 'working' from an earlier run means that run was killed mid-import (usually memory).
+  // Mark it failed so the queue moves on instead of retrying the same book forever.
+  await env.DB.prepare(
+    "UPDATE hf_rulebook_queue SET status = 'failed', result = 'run ended during import (likely too big for memory)', updated_at = ? WHERE status = 'working'",
+  )
+    .bind(nowIso())
+    .run();
   const next = await env.DB.prepare("SELECT * FROM hf_rulebook_queue WHERE status = 'waiting' ORDER BY id LIMIT 1").first<{
     id: number; state: string; year: string; book: string; url: string; page_offset: number;
   }>();
   if (!next) return null;
+  await env.DB.prepare("UPDATE hf_rulebook_queue SET status = 'working', updated_at = ? WHERE id = ?").bind(nowIso(), next.id).run();
   try {
     const r = await importRulebook(env, { state: next.state, year: next.year, book: next.book, url: next.url, pageOffset: next.page_offset });
     await env.DB.prepare("UPDATE hf_rulebook_queue SET status = 'done', result = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(r), nowIso(), next.id).run();

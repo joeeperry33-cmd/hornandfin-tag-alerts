@@ -623,10 +623,11 @@ export default {
     // visitors from outside the US. Hand the checks to this Worker's request handler, which runs in
     // the US (see [placement] in wrangler.toml); run them here only if that hand-off fails.
     if (await runChecksInUs(env)) return;
-    await stockingRun(env);
+    // Tag checks and alerts first: nothing after them (stocking, rulebook imports) can hold them up.
     const result = await runChecks(env);
     const sent = await sendInstantAlerts(env);
     console.log(`checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
+    await stockingRun(env);
   },
 };
 
@@ -659,19 +660,19 @@ async function internalRunChecks(env: Env, req: Request): Promise<Response> {
   const fresh = row && Date.now() - new Date(row.updated_at).getTime() < 120_000;
   if (!given || !row || !fresh || given !== row.value) return new Response('Not found', { status: 404 });
   await env.DB.prepare('DELETE FROM settings WHERE key = ?').bind(RUN_TOKEN_KEY).run();
-  await stockingRun(env);
+  // Tag checks and alerts first: nothing after them (stocking, rulebook imports) can hold them up.
   const result = await runChecks(env);
   const sent = await sendInstantAlerts(env);
   const placed = req.headers.get('cf-placement') ?? 'unknown';
   console.log(`[${placed}] checked ${result.checked} sources, ${result.events} new events, ${sent.emails} emails, ${sent.sms} texts`);
+  await stockingRun(env);
   return Response.json({ placed, ...result, emails: sent.emails, sms: sent.sms });
 }
 
-/** Trout stocking reports (each source has its own interval), then any alerts for new stockings. Never blocks tag checks. */
+/** Trout stocking reports (each source has its own interval), then any alerts for new stockings, then one rulebook
+ *  import. Runs after the tag checks, so a crash here (a rulebook too big for memory, say) can't stop them. */
 async function stockingRun(env: Env): Promise<void> {
   try {
-    const book = await importNextRulebook(env).catch((err) => `rulebook import crashed: ${err}`);
-    if (book) console.log(`rulebook: ${book}`);
     // First run after setup: copy the listings now instead of waiting for the morning job.
     const have = await env.DB.prepare('SELECT COUNT(*) AS n FROM hf_listings').first<{ n: number }>().catch(() => null);
     if (have && have.n === 0) console.log('listings first sync', JSON.stringify(await syncListings(env)));
@@ -684,4 +685,7 @@ async function stockingRun(env: Env): Promise<void> {
   } catch (err) {
     console.error('stocking run failed', err);
   }
+  // Last, because a big rulebook can use enough memory to end the whole run.
+  const book = await importNextRulebook(env).catch((err) => `rulebook import crashed: ${err}`);
+  if (book) console.log(`rulebook: ${book}`);
 }
